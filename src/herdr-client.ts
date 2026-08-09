@@ -684,7 +684,7 @@ export class HerdrClient {
 						const callback = this.onEventReady?.(reconnected);
 						if (callback && typeof (callback as Promise<void>).then === "function") {
 							void Promise.resolve(callback).catch((cause) => {
-								this.reportEventError(
+								fail(
 									new HerdrRpcError("Herdr event-ready callback rejected.", {
 										code: "ready_callback_error",
 										kind: "protocol",
@@ -693,11 +693,12 @@ export class HerdrClient {
 										delivery: "unknown",
 										cause,
 									}),
+									true,
 								);
 							});
 						}
 					} catch (cause) {
-						this.reportEventError(
+						fail(
 							new HerdrRpcError("Herdr event-ready callback threw.", {
 								code: "ready_callback_error",
 								kind: "protocol",
@@ -706,6 +707,7 @@ export class HerdrClient {
 								delivery: "unknown",
 								cause,
 							}),
+							true,
 						);
 					}
 					continue;

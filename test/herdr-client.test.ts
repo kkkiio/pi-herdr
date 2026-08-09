@@ -379,6 +379,47 @@ describe.skipIf(process.platform === "win32")("HerdrClient Unix socket transport
 		client.stopEvents();
 	});
 
+	it("retries a reconnected event stream when reconciliation rejects", async () => {
+		const readiness: boolean[] = [];
+		const reported: HerdrRpcError[] = [];
+		const api = await startApi((request, connection, socket) => {
+			const acknowledgement = `${JSON.stringify({
+				id: request.id,
+				result: { type: "subscription_started" },
+			})}\n`;
+			if (connection === 0) {
+				socket.end(acknowledgement);
+				return;
+			}
+			socket.write(acknowledgement);
+			if (connection === 2) {
+				socket.write(
+					`${JSON.stringify({
+						event: "pane_closed",
+						data: { type: "pane_closed", pane_id: "w1:p2", workspace_id: "w1" },
+					})}\n`,
+				);
+			}
+		});
+		const events: HerdrEvent[] = [];
+		const client = new HerdrClient(socketPath, {
+			eventReconnectDelaysMs: [0],
+			onEventError: (error) => reported.push(error),
+			onEventReady: async (reconnected) => {
+				readiness.push(reconnected);
+				if (reconnected && readiness.filter(Boolean).length === 1) throw new Error("snapshot transport failed");
+			},
+		});
+
+		await client.startEvents((event) => events.push(event));
+		await vi.waitFor(() => expect(events).toHaveLength(1));
+
+		expect(api.connections).toBe(3);
+		expect(readiness).toEqual([false, true, true]);
+		expect(reported).toContainEqual(expect.objectContaining({ code: "ready_callback_error", kind: "protocol" }));
+		client.stopEvents();
+	});
+
 	it("rebuilds event subscriptions when tracked panes change", async () => {
 		const api = await startApi((request, _connection, socket) => {
 			socket.write(`${JSON.stringify({ id: request.id, result: { type: "subscription_started" } })}\n`);
