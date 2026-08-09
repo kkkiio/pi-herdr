@@ -535,7 +535,7 @@ describe("AgentSupervisor launch transactions", () => {
 		};
 
 		await expect(harness.supervisor.launch({ ...request, isolation: "worktree" }, launchContext())).rejects.toThrow(
-			/cleanup left residual resources: worktree w2: dirty worktree/,
+			/cleanup left residual resources: worktree w2 at \/workspace-worker: dirty worktree/,
 		);
 
 		const cleanup = harness.operations

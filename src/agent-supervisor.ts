@@ -154,6 +154,7 @@ export class AgentSupervisor {
 		let createdTabId: string | undefined;
 		let createdPaneId: string | undefined;
 		let createdWorktreeWorkspaceId: string | undefined;
+		let createdWorktreePath: string | undefined;
 		let launchCwd = requestedCwd;
 		let launchSessionDirectory =
 			launchConfiguration === undefined ? configuration.sessionDirectory : launchConfiguration.sessionDirectory;
@@ -169,9 +170,10 @@ export class AgentSupervisor {
 					focus: false,
 				});
 				createdWorktreeWorkspaceId = created.workspace.workspace_id;
+				createdWorktreePath = created.worktree.path;
 				createdTabId = created.tab.tab_id;
 				createdPaneId = created.root_pane.pane_id;
-				launchCwd = created.worktree.path || requestedCwd;
+				launchCwd = createdWorktreePath || requestedCwd;
 				if (!this.environment.PI_CODING_AGENT_SESSION_DIR) {
 					launchSessionDirectory = (await this.readConfiguration(launchCwd)).sessionDirectory;
 				}
@@ -248,7 +250,7 @@ export class AgentSupervisor {
 						runtimeClosed = true;
 					} else {
 						cleanupFailures.push(
-							`worktree ${createdWorktreeWorkspaceId}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+							`worktree ${createdWorktreeWorkspaceId}${createdWorktreePath ? ` at ${createdWorktreePath}` : ""}: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
 						);
 					}
 					if (createdPaneId && !runtimeClosed) {
