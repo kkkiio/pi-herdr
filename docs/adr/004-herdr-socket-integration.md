@@ -17,9 +17,9 @@ pi-herdr 需要创建 Agent tab/pane、启动交互式 pi、投递 live prompt�
 
 ### 2. Creation uses returned root panes
 
-共享 workspace 时调用 `tab.create`，直接在返回的 root pane 中执行 `agent.start`。Worktree 隔离时调用 `worktree.create`，直接复用其返回的 workspace、tab 和 root pane，不再额外调用 `tab.create`。
+共享 workspace 时把 `Agent({ cwd })` 解析出的工作目录传给 `tab.create`，直接在返回的 root pane 中执行 `agent.start`；未提供 cwd 时继承 Primary 调用时的 cwd。Worktree 隔离时把同一 cwd 传给 `worktree.create`，直接复用其返回的 workspace、tab 和 root pane，不再额外调用 `tab.create`。Definition 文件位置不参与 cwd 或 worktree 选择。
 
-`agent.start` 启动全新正常落盘的 pi session，显式加载同一个 pi-herdr extension 的 Spawned role，并传入创建时固定的 definition 配置。name 同时用于 pi session、herdr Agent route 和 tab label。
+`agent.start` 启动全新正常落盘的 pi session，显式加载同一个 pi-herdr extension 的 Spawned role，并传入创建时固定的 definition 配置。pi-herdr 不传 `--approve` 或 `--no-approve`；Spawned pi 针对实际 cwd 正常执行原生 project trust。name 同时用于 pi session、herdr Agent route 和 tab label。
 
 只有初始 `agent.prompt` 成功后 `Agent` 才返回 `launched`。此前失败按逆序使用 `pane.close` / `tab.close`、session cleanup 和 `worktree.remove({ force: false })` 回滚；herdr 拒绝移除时保留现场并报告残留。
 
