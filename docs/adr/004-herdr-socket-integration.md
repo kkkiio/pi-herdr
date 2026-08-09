@@ -5,121 +5,116 @@
 
 ## 上下文
 
-pi-herdr 扩展需要和 herdr 交互来：
+pi-herdr 需要通过 herdr 创建 Agent tab 与受管 pane、识别 Agent、投递 prompt、监听活动状态、恢复 runtime，并管理可选 worktree。
 
-- 创建 pane 并启动 subagent。
-- 等待 subagent 完成或失败。
-- 查询 pane / agent 状态。
-- 向运行中的 pane 发送 steering 消息。
-- 创建/清理用于隔离的 git worktree。
-
-herdr 提供两套接口：CLI wrappers 和 raw socket API。需要决定扩展主要用哪一套。
-
-## 参考
-
-- [herdr socket API docs](https://herdr.dev/docs/socket-api/)
-  - `agent.list`, `agent.get`, `agent.wait`
-  - `pane.split`, `pane.run`, `pane.get`, `pane.read`, `pane.send_text`
-  - `worktree.create`, `worktree.remove`
-- [herdr agent guide](https://herdr.dev/agent-guide.md) — 环境变量 `HERDR_SOCKET_PATH`、`HERDR_WORKSPACE_ID`、`HERDR_TAB_ID`、`HERDR_PANE_ID`
-- [pi-herdr-subagents (0xRichardH)](https://github.com/0xRichardH/pi-herdr-subagents) — 通过 herdr CLI / socket 创建 tab、启动 pi 子会话、轮询完成
+一次性 subagent 可以为每个进程调用一次 `agent.wait`；持久 Agent 会在 `working`、`blocked`、`idle` 之间多次切换，因此需要长期状态流和断线后的 reconciliation。
 
 ## 决策
 
-### 1. 控制面用 raw socket API 作为 RPC client
+### 1. Raw socket API 是核心控制面
 
-pi-herdr 的核心控制面通过 herdr 的 raw socket API 实现，而不是 CLI wrappers。但**不把它当成事件总线**，而是当作一组请求/响应 RPC：每个操作发一个请求，等一个响应，出错就报错。
+扩展实现轻量、类型化的 herdr socket client，核心功能使用结构化 RPC 和事件订阅。CLI 只用于开发、人工调试和一次性诊断。
 
-原因：
+Socket client：
 
-- **结构化响应**：socket 返回 JSON，直接解析 `pane_id`、`agent_status`、`workspace_id` 等字段；CLI 输出是给人类看的文本，解析脆弱。
-- **低延迟**：spawn、steer、状态查询都是一次 request/response，不需要反复 fork 子进程。
-- **复用现有连接**：socket 连接在 `session_start` 时建立，后续 RPC 复用同一条连接。
-- **herdr 官方推荐**：socket API 文档明确说明，需要 direct request/response 时应使用 socket。
+- 从 `HERDR_SOCKET_PATH` 连接当前 herdr server。
+- 使用 newline-delimited JSON 和唯一 request ID。
+- 同一连接复用普通 RPC 与事件订阅。
+- 断线后重新连接、恢复订阅并触发 reconciliation。
+- Primary session 切换时更新当前调用者 identity；Agent registry 保持 herdr session 范围。
 
-### 2. 完成检测用 `agent.wait`，不用事件订阅
+不回退到猜测的默认 socket 路径，避免控制错误的 herdr session。
 
-background subagent 的完成检测不使用 `events.subscribe` 等持久订阅，而是对**每个 subagent 单独调用 `agent.wait`**：
+### 2. 每个 Agent 使用独立 tab
 
-```json
-{"id":"wait_1","method":"agent.wait","params":{"pane_id":"w1:p2","until":"done","timeout_ms":0}}
-```
+每个 Agent 创建一个独立 herdr tab，并在 tab 的初始 pane 中运行可以反复接收 prompt 的交互式 pi 进程。tab 是 Agent 的 UI 和资源容器，初始 pane 是受管 runtime endpoint。
 
-- `agent.wait` 是 herdr 内置的长轮询 RPC，agent settle 后返回；从 supervisor 视角看就是一次会阻塞的 RPC 调用。
-- 不需要维护 `events.subscribe` 的订阅状态，也不需要重连后重新订阅。
-- socket 断开时，`agent.wait` 会报错，supervisor 把该 subagent 标记为 `error`，让 primary agent 决定下一步。
+创建 Agent 时：
 
-`agent.wait` 只是完成检测的**主证据**；sidecar 文件和 sentinel 仍作为辅助证据（见 ADR-001）。
+1. 根据 isolation 设置选择当前 workspace 或创建 worktree workspace。
+2. 验证 pi session name 符合 `[a-z][a-z0-9_-]{0,31}`，且没有 live 或 offline 持久 Agent 占用。
+3. 创建不抢焦点、以 pi session name 标记的 tab。
+4. 使用 `agent.start <name>` 在 tab 初始 pane 中启动带持久 session 和 agent extension 的 pi。
+5. 等待 herdr 识别 Agent，并记录 native pi session reference。
+6. 投递初始 prompt。
 
-### 3. CLI 作为调试和人工降级手段
+恢复 Agent 时使用 registry 保存的 pi session reference 打开同一个 session，从中读取 name，再创建 tab 并绑定 herdr Agent alias。
 
-CLI（`herdr agent list`、`herdr pane run` 等）保留用于：
+Agent extension 监听 pi 的 `session_info_changed`。合法且唯一的新 session name 同步到 `agent.rename` 和 `tab.rename`；无效或冲突的名字恢复为上一个有效 session name，并向用户显示错误。
 
-- 一次性查询（如 `ListAgents` 工具可以快速走 CLI `--json`）。
-- socket 不可用时的人为降级路径。
-- 开发和本地调试。
+### 3. 使用 Agent 输入接口投递消息
 
-当前不要求 socket 断开时无缝切换到 CLI；如果 socket 连接不上，扩展返回错误并提示用户检查 herdr 状态。
+向 Agent 发送新请求优先使用 herdr 的 Agent prompt/input 接口，因为它会验证目标 pane 当前确实由 Agent 控制，并正确处理终端 paste/Enter 语义。
 
-### 4. Socket client 设计
+原始 `pane.send_text` 只用于明确需要终端级控制的降级或调试路径。
 
-扩展内部实现一个轻量 TypeScript socket client：
+消息的 `steer` / `followUp` 语义由 agent extension 与 pi message queue 实现；herdr 负责把输入送到正确 runtime。
 
-- 读取 `HERDR_SOCKET_PATH`；若未设置，回退到 `~/.config/herdr/herdr.sock`。
-- 使用 newline-delimited JSON over Unix domain socket / named pipe。
-- 每个请求带唯一 `id`；服务端响应也带相同 `id`。
-- 请求/响应一一对应；**不实现持久事件订阅**。
-- 连接在 `session_start` 时建立，在 `session_shutdown` 时关闭。
+### 4. 事件订阅负责状态更新
 
-### 5. 核心方法映射
+Supervisor 订阅 `tab.closed`、`pane.agent_status_changed`、`pane.agent_detected`、`pane.closed` 和 `pane.exited`：
 
-| pi-herdr 功能 | herdr socket 方法 | 说明 |
-| ------------- | ----------------- | ---- |
-| 列出可到达会话 | `agent.list` | 返回 herdr 当前 workspace/agent 列表 |
-| 创建 subagent pane | `pane.split` + `pane.run` 或 `agent.start` | 在新 pane 中启动 pi 子进程 |
-| 等待 subagent 完成 | `agent.wait` | 长轮询 RPC，agent settle 后返回 |
-| 查询 pane 状态 | `pane.get`, `agent.get` | 读 `agent_status`, `cwd`, `foreground_cwd` |
-| 读取 pane 输出 | `pane.read` | 用于 sentinel 检测或提取结果 |
-| 向 pane 发消息 | `pane.send_text` | 实现 `steer_subagent` |
-| worktree 隔离 | `worktree.create`, `worktree.remove` | 复用 herdr 原生 worktree workspace |
+- `working`、`blocked` 直接更新 Agent 状态。
+- `idle`、`done` 统一更新为 Agent `idle`。
+- Agent tab 或受管 pane 退出时将 runtime 标记为 `unavailable`，但保留逻辑 Agent 和 session。
+- `unknown` 不作为工作成功的证据。
 
-### 6. 错误处理
+不为每个 Agent 维持永久 `agent.wait`。`agent.wait` 可以用于创建和恢复过程中的一次性同步，但它的返回不代表 Agent 生命周期结束。
 
-- socket 连接失败：返回 `Herdr socket not available` 错误；核心路径上的关键调用（如 spawn）失败即失败。
-- herdr 返回 `not_found` / `invalid_params`：直接透传给 LLM/user。
-- `agent.wait` 因 socket 断开而失败：标记对应 subagent 为 `error`，primary agent 决定重试或放弃。
-- pane 运行命令返回非零 exit code：supervisor 读 sidecar / sentinel 判定，不依赖 herdr 的进程退出码 alone。
+### 5. 重连与 reconciliation
 
-### 7. 安全
+Socket 断开不把所有 Agent 永久标记为 error。Supervisor 进入 disconnected 状态并进行有界重连；恢复连接后：
 
-- socket 是本地 Unix domain socket / named pipe，不暴露到网络。
-- 只连接 `HERDR_SOCKET_PATH` 指向的当前 session socket，不跨 session 操作。
-- 不通过 socket 发送用户凭证或敏感 prompt；只发送 herdr 控制命令和已脱敏的元数据。
+1. 重新订阅生命周期事件。
+2. 调用 `agent.list` 获取当前 runtime 快照。
+3. 使用 native session reference、tab ID、pane ID 和 workspace provenance 与 registry 匹配。
+4. 更新 tab/pane runtime 引用并投递待处理消息。
 
-## 后果
+无法重新匹配的 Agent 标记为 `unavailable`，等待下一条消息触发 session 恢复。
+
+### 6. 核心方法映射
+
+| pi-herdr 功能 | herdr 能力 |
+| --- | --- |
+| 创建 Agent 容器 | `tab.create`，然后在初始 pane 调用 `agent.start <name>` |
+| 投递新请求 | Agent prompt/input API |
+| steering 与终端控制 | Agent input；必要时 `pane.send_text` |
+| 查询 runtime | `agent.list`、`agent.get`、`pane.get` |
+| 监听状态 | `events.subscribe` + pane Agent lifecycle events |
+| 读取诊断输出 | `pane.read` |
+| worktree 生命周期 | `worktree.create`、`worktree.remove` |
+
+### 7. 安全边界
+
+- 只连接 herdr 注入的当前 socket。
+- name 是首选 Agent target；pane ID 只作为当前 runtime fallback，tab ID 只用于 UI。
+- `ListAgents` 返回 herdr 的全部可达结果；registry 只补充 pi-herdr 创建的 Agent metadata。
+- agent extension 不暴露 spawn、remove 或任意 pane 控制能力。
+- prompt 和消息内容只发送到目标 Agent，不写入 UI 元数据。
 
 ## 备选方案
 
-| 方案 | 说明 | 未采纳原因 |
-| ---- | ---- | ---------- |
-| herdr CLI wrappers 作为核心接口 | 用 `herdr agent wait`、`herdr pane run` 等命令 | CLI 输出文本解析脆弱；频繁 fork 开销大；不如 socket 结构化 |
-| socket 事件订阅驱动 | 用 `events.subscribe` 监听 pane/agent 状态变化 | 需要维护订阅列表和重连后重新订阅；`agent.wait` + 轮询更简单 |
-| socket 断开后自动重连 | 断连时指数退避重试，恢复订阅和请求 | 重连后请求生命周期、订阅状态同步复杂；当前选择 fail-fast |
-| socket client 作为独立 npm 模块发布 | 把 client 拆出去供其他扩展复用 | 用户明确不需要；当前内嵌在 pi-herdr 里 |
-| 跨 herdr session 通信 | 通过不同 session socket 发现和操作 subagent | 需要跨 session 路由；当前限定在同一 herdr session |
+| 方案 | 未采纳原因 |
+| --- | --- |
+| CLI wrappers 作为核心实现 | 频繁 fork、文本解析和长期状态监听都不适合扩展控制面 |
+| 每个 Agent 永久 `agent.wait` | wait 观察的是当前语义状态，不表示持久 Agent 结束；每轮都需要重新武装 |
+| 每秒轮询所有 pane | 空闲 Agent 长期存在时产生无意义请求，并引入固定延迟 |
+| socket 断开即永久 error | 持久 session 的目标就是允许 runtime 和 supervisor 恢复 |
+| 直接向 pane 写原始文本 | 可能把输入发送给已不再由目标 Agent 控制的终端 |
+
+## 后果
 
 ### 正面
 
-- 没有持久事件订阅，状态机简单；socket 断开只需报错，不需要复杂的重连/重新订阅逻辑。
-- JSON 响应稳定，不容易被 herdr CLI 输出格式变化影响。
-- 能直接复用 herdr 的 `worktree.*` 原生能力。
+- 状态流与持久 Agent 模型一致，不混淆 idle 和退出。
+- 重连后可以从 registry 与 herdr 快照恢复，而不依赖内存 watcher。
+- Agent 输入接口减少终端状态和 prompt 投递错误。
 
 ### 负面
 
-- 每个 background subagent 都需要一个 `agent.wait` 长轮询连接/请求，数量等于并发 subagent 数。
-- 状态查询需要自己轮询或调用 `agent.wait`，不能像事件订阅那样被动推送。
-- 调试比 CLI 麻烦，需要额外日志记录 sent/received JSON。
+- Socket client 必须实现事件订阅、重连和 reconciliation。
+- 需要正确处理 Primary session 切换与仍在后台运行的 Agent。
 
 ### 未解决
 
-- 是否需要在 socket 断开后自动重连？当前先不做；断开即报错，让 primary agent 决定。
+- 无。

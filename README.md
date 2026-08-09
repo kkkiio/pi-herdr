@@ -1,51 +1,42 @@
 # pi-herdr
 
-Subagents and agent-to-agent messaging for pi, running inside [herdr](https://herdr.dev) panes.
+![pi-herdr logo](assets/pi-herdr-logo.png)
 
-Only activated when pi is run in the herdr environment (`HERDR_ENV=1`).
+pi-herdr 为运行在 [herdr](https://herdr.dev) 中的 pi 提供持久后台 Agent 和跨会话消息通信。每个 Agent 拥有独立 tab 和上下文，在空闲后可以继续通过消息复用，而不是为每次工作启动一个一次性进程。
+
+pi-herdr 只在 herdr 环境中启用（`HERDR_ENV=1`）。
 
 ## Installation
+
+项目尚未发布到 npm。发布后可通过 pi 安装：
 
 ```bash
 pi install @kkkiio/pi-herdr
 ```
 
-## Bundled subagents
-
-pi-herdr ships two built-in subagents:
-
-- **`explorer`** — read-only codebase search. Use it to find files, grep symbols, or answer "where is X defined". Defaults to the cheapest available model (`gpt-5.6-luna` first, then `deepseek-v4-flash`), falling back to the parent model with a warning.
-- **`general-purpose`** — general-purpose agent with full tools, including `edit`/`write`. Defaults to the parent model.
-
 ## Usage
 
-Ask the pi agent to explore a repo using the bundled `explorer` agent:
+在 Primary Agent 中创建一个具名 Explorer：
 
-```
-Use gpt-5.6-luna to explore the `ldtk` repo and describe all the art assets within it.
-```
-
-Spawn a `general-purpose` subagent for a multi-step task:
-
-```
-Spawn a general-purpose subagent to refactor all JSON parsing in `src/` to use the new parser module.
+```text
+创建一个名为 code-explorer 的 explorer Agent，调查认证逻辑在哪里实现，并把结论回复给我。
 ```
 
-## Tools
+Agent 回复后会保持空闲。需要继续调查时，Primary Agent 通过 `ListAgents` 找到它，再用 `SendMessage` 发送后续请求：
 
-- `Agent` — spawn a subagent in a herdr pane.
-- `get_subagent_result` — fetch the result of a background subagent.
-- `steer_subagent` — send a mid-run message to a running subagent.
-- `ListAgents` / `SendMessage` — agent-to-agent messaging.
+```text
+让 code-explorer 再检查刷新令牌的错误处理，并回复新增发现。
+```
 
-## Custom agents
+内置角色：
 
-Add `.pi/agents/<name>.md`, `.agents/agents/<name>.md`, or `~/.pi/agent/agents/<name>.md` to define custom agents. A custom `explorer.md` or `general-purpose.md` overrides the bundled version. Project-level files (`.pi/agents/`) take precedence over workspace-level (`.agents/agents/`), which take precedence over global ones.
-
-See `docs/adr/003-agent-definitions.md` for the frontmatter format.
+- `explorer`：只读搜索与代码定位，默认优先选择成本较低的可用模型。
+- `general-purpose`：通用执行，可读取、创建和修改文件，默认继承 Primary Agent 的模型。
 
 ## Documentation
 
-- `docs/subagents.md` — subagent API and lifecycle.
-- `docs/messaging.md` — agent-to-agent messaging.
-- `docs/adr/` — architecture decision records.
+- [Agents](docs/agents.md) — Agent API、生命周期与复用方式。
+- [Messaging](docs/messaging.md) — `ListAgents`、`SendMessage` 与 reply 语义。
+- [Agent definitions](docs/agent-definitions.md) — bundled 与自定义 Agent Markdown。
+- [Architecture](docs/architecture.md) — runtime、持久化和 herdr 集成。
+- [Architecture decisions](docs/adr/) — 关键设计选择及理由。

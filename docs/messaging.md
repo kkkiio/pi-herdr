@@ -1,78 +1,104 @@
-# Agent-to-Agent Messaging
+# Agent Messaging
 
-跨会话消息传递：一个 agent 会话向另一个会话投递一段文本，用于任务交接、状态汇报、结果回传。对齐 Claude Code 的 `ListAgents` + `SendMessage` 接口。
+pi-herdr 使用消息连接 herdr 中可到达的 pi 会话。消息传递请求和结论，不复制发送方的会话历史，也不要求双方属于同一个 Team、工作目录或 worktree。
 
-意图：**只传递结论，不传递上下文**。消息是纯文本，接收方只看到发送者名字、回复地址和文本——不是会话历史、不是文件。要迁移完整上下文请用 resume，不是消息。
+每条入站消息都包含发送者身份和 reply 地址。收到请求的 Agent 使用 reply 地址回复，不假设消息一定来自创建自己的 Primary Agent。
 
 ## ListAgents
 
-发现当前可到达的会话列表。实现上直接调用 herdr 的 `agent list`（或其 socket API `agent.list`），因此只返回 herdr 能看到的 agent/session。
+`ListAgents` 以当前 herdr session 为范围：返回 herdr 当前可达的全部 Agent 和 peer，并补充 pi-herdr 管理但 runtime 暂时 unavailable 的持久 Agent。它不按创建者或 workspace 过滤。
 
 ```typescript
-ListAgents() → {
+ListAgents() => {
   agents: [
     {
-      name: string,        // herdr agent 名（显式命名，否则从目录派生）
-      type: "peer" | "subagent",
-      cwd?: string,        // 区分同名会话
-      status?: "idle" | "working" | "blocked" | "done" | "unknown",
+      name?: string,
+      type: "agent" | "peer",
+      createdBy?: string,
+      cwd?: string,
+      workspace_id: string,
+      tab_id: string,
+      pane_id: string,
+      status: "starting" | "working" | "blocked" | "idle" | "unavailable",
     },
-    ...
   ],
 }
 ```
 
-- 由 agent 调用，自己决定要向谁发消息。
-- 只列出**已存在**的会话；不负责创建会话。
-- 在 pi-herdr 中，可到达的会话来自 herdr `agent list`，包括：
-  - 同一 herdr workspace 下的其他 pi 会话（peer）。
-  - 由 `Agent` 工具启动的 background subagent（`type: "subagent"`）。
-  - 这些会话通过 herdr socket registry 发现，不是通过网络扫描。
+- `agent`：由 pi-herdr 的 `Agent` 工具创建，拥有持久 session。
+- `peer`：herdr 中可到达的其他 pi 会话。
+- `createdBy` 只是创建来源元数据，不用于过滤列表或限制通信。
+- pi-herdr 创建的 Agent 始终有 name；它同时是 pi session name 和 herdr live alias，符合 `[a-z][a-z0-9_-]{0,31}`，并在当前 herdr session 中保持唯一。
+- 手动启动的 peer 可以没有 name，此时使用 `pane_id` 寻址。
+- `pane_id` 是 runtime fallback，可能在 pane 跨 workspace 移动或 session 恢复后变化。
+- `tab_id` 用于 UI 定位，不是 Agent 路由身份。
+- `cwd`、workspace、tab 和 pane 都不构成通信边界。
+
+实现以 herdr `agent.list` 的可达结果为基础，再用 pi-herdr registry 补充 `createdBy` 和持久 session 信息。
 
 ## SendMessage
 
-向指定会话投递一条消息。
+```typescript
+SendMessage({
+  agent: string,
+  message: string,
+  delivery?: "steer" | "followUp",
+}) => {
+  delivered: boolean,
+}
+```
+
+- `agent` 接受唯一 live name，或当前宿主 `pane_id`。
+- `message` 是接收方真正看到的文本。
+- `steer` 尽快影响正在进行的工作；目标空闲时立即触发新 turn。
+- `followUp` 等当前工作 settle 后再交付；目标空闲时同样立即触发新 turn。
+- 未指定 `delivery` 时默认使用 `followUp`，避免普通补充消息打断正在执行的工具链。
+
+普通工作结果也通过 `SendMessage` 返回。pi-herdr 不提供单独的 result store 或结果消费协议。
+
+## Reply
+
+消息进入接收方时，系统附加路由信息。发送方有唯一 live herdr name 时使用 name；没有时使用当前 `pane_id`：
+
+```text
+From: primary
+Reply-To: w1:p1
+```
+
+Agent 完成请求后直接回复：
 
 ```typescript
 SendMessage({
-  agent: string,      // ListAgents 返回的会话名
-  message: string,    // 要传达的内容（纯文本）
-}) → { delivered: boolean }
+  agent: "w1:p1",
+  message: "认证入口位于 src/auth/index.ts；刷新令牌逻辑在 src/auth/refresh.ts。",
+})
 ```
 
-- 调用方（agent）只表达**意图**，消息文本由 agent 自己写。
-- 接收方会话在空闲时收到消息即开新 turn；工作中则在当前工具之间/之后读取。
-- 接收方的权限规则照常生效——消息不能代替用户批准、不能改配置、不能执行 slash command。
+reply 地址只负责路由，不携带发送方的上下文、权限或工具能力。普通 Primary/peer 的 pi session name 可以包含空格等字符，因此不会自动成为 herdr name；只有 pi-herdr 创建的 Agent 强制让两者一致。
 
-### 回复
+## 投递到 pi 会话
 
-消息可携带**回复地址**，接收方借此回信；不保证原路返回，但保证同一通道语义对称。
-
-## Subagent 结果投递
-
-background subagent 完成后，supervisor 通过 `SendMessage` 语义把结果投递回主会话。实际实现使用 `pi.sendMessage`：
+接收方进程内的扩展使用 pi 的消息注入能力：
 
 ```typescript
 pi.sendMessage(
   {
-    customType: "subagent_result",
-    content: formattedResult,
-    details: { agentId, status, toolUses, tokens, durationMs, outputFile },
+    customType: "agent_message",
+    content: formattedMessage,
+    details: { senderId, senderName, replyTo },
   },
-  { deliverAs: "followUp", triggerTurn: true }
-);
+  { deliverAs: "followUp", triggerTurn: true },
+)
 ```
 
-- `triggerTurn: true`：主 agent 空闲时立即开新 turn。
-- `deliverAs: "followUp"`：主 agent 正在工作时，等当前工作结束再交付，不打断现有工作。
-- `get_subagent_result` 消费结果后会抑制这条通知。
+- 接收方空闲时，消息立即触发新 turn。
+- 接收方工作中时，消息在当前工作结束后交付。
+- 消息不需要轮询。
 
-## Commands（user 视角）
+如果目标 runtime 暂时不可用，pi-herdr 创建的 Agent 可以通过持久 session 恢复后再接收消息。普通 peer 不受 pi-herdr 管理，投递失败会直接返回错误。
 
-| 命令                            | 来源     | 作用                                         |
-| ------------------------------- | -------- | -------------------------------------------- |
-| `/list-agents`（别名 `/peers`） | **新增** | 列出当前可到达的会话（子代理、本地会话）     |
-| `/name`                         | pi 已有  | 给当前会话命名；未命名时从目录派生，可能重名 |
-| `/session`                      | pi 已有  | 显示本会话信息与统计                         |
+## Agent 权限
 
-agent 用上面的工具（`ListAgents` / `SendMessage`），user 用命令——两个视角各一套。
+pi-herdr 创建的 Agent 始终获得 `ListAgents` 和 `SendMessage`，即使 definition 限制了其他工具。它们不会获得 `Agent` 或任意 pane 管理能力，因此可以直接协作，但不能递归创建下级 Agent。
+
+消息不能提升接收方权限，不能代替用户批准，也不能执行 slash command。

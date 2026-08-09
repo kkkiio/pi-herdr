@@ -5,119 +5,118 @@
 
 ## 上下文
 
-pi-herdr 需要定义内置 agent，同时允许用户和项目自定义 agent。定义方式应尽可能复用 pi-subagents 已验证的 markdown + frontmatter 方案，减少新概念的引入。
+pi-herdr 需要提供 Explorer 和 General Purpose 两个内置角色，同时允许项目、工作区和用户覆盖角色。角色定义应该是可发布、可阅读的资源，不应散落在 TypeScript 字符串中。
 
-## 参考
-
-- [pi-subagents @tintinweb](https://github.com/tintinweb/pi-subagents)
-  - `src/default-agents.ts` — 内置 `general-purpose`、`Explore`、`Plan`
-  - `src/custom-agents.ts` — 从 `.pi/agents/*.md`、`.agents/agents/*.md`、`~/.pi/agent/agents/*.md` 加载
-  - `src/types.ts` — `AgentConfig` 字段定义
+持久 Agent 还需要一组公共协作规则。角色 prompt 与控制面 prompt 必须分离，避免自定义 definition 意外删除 identity、reply 和生命周期约束。
 
 ## 决策
 
-### 1. 内置 agent
+### 1. Bundled definition 使用 Markdown 文件
 
-pi-herdr 内置两个 agent：
+npm 包根目录包含：
 
-- `explorer`：只读搜索 agent。
-- `general-purpose`：通用执行 agent，可改文件。
-
-它们 hardcoded 在扩展代码中，用户可通过同名自定义 markdown 文件覆盖。
-
-### 2. 自定义 agent 发现路径
-
-按优先级从高到低：
-
-1. 项目级：`.pi/agents/<name>.md`
-2. 工作区级：`.agents/agents/<name>.md`
-3. 全局级：`~/.pi/agent/agents/<name>.md`
-
-项目级覆盖工作区级和全局级；工作区级覆盖全局级；同名文件覆盖内置 agent。
-
-### 3. Markdown 文件格式
-
-文件包含 YAML frontmatter + Markdown body。Body 作为 system prompt。
-
-```markdown
----
-model: deepseek/deepseek-v4-flash
-thinking: low
-max_turns: 20
-tools: read, bash, grep, find, ls
-inherit_context: false
-run_in_background: false
-isolated: false
----
-
-你是一个专注于 API 兼容性的只读审查 agent。
+```text
+agents/
+├── explorer.md
+└── general-purpose.md
 ```
 
-### 4. 支持的 frontmatter 字段
+文件由 YAML frontmatter 和 Markdown body 组成。Body 追加到公共 Agent system prompt，而不是替换整个 system prompt。
 
-复用 pi-subagents 的字段，去除当前不需要的项：
+公共 prompt 负责：
+
+- 当前 Agent identity 和 `createdBy`。
+- sender 与 reply 地址的使用方法。
+- 完成当前请求后回复并保持 idle。
+- 禁止创建下级 Agent 或管理其他 Agent runtime。
+
+角色 body 只描述专业职责、工作方式和输出要求。
+
+### 2. npm 明确包含资源
+
+`package.json` 的 `files` 白名单包含 `dist` 与 `agents`。运行时通过 `import.meta.url` 定位 `agents/`，不依赖调用者 cwd。
+
+CI 使用 `npm pack --dry-run` 或 `npm pack --json` 断言以下路径存在：
+
+```text
+package/agents/explorer.md
+package/agents/general-purpose.md
+```
+
+### 3. 自定义 definition 发现顺序
+
+优先级从高到低：
+
+1. `.pi/agents/<name>.md`
+2. `.agents/agents/<name>.md`
+3. `~/.pi/agent/agents/<name>.md`
+4. npm 包内 `agents/<name>.md`
+
+同名高优先级文件完整覆盖低优先级定义。文件名是 `agent_type`，匹配时大小写不敏感。
+
+### 4. Frontmatter 字段
 
 | 字段 | 类型 | 说明 |
-| ---- | ---- | ---- |
-| `model` | string / string[] | 默认模型，如 `deepseek/deepseek-v4-flash`；数组表示偏好列表 |
-| `thinking` | string | `off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max` |
-| `max_turns` | number | 0 表示无限制 |
-| `tools` | CSV | 内置工具白名单；`*` 或 `all` 表示全部 |
-| `extensions` | boolean / CSV | `true` 继承全部；`false` 或 `none` 不给扩展；CSV 为允许列表 |
-| `exclude_extensions` | CSV | 扩展黑名单 |
-| `skills` | boolean / CSV | 同 `extensions` |
-| `disallowed_tools` | CSV | 即使 `tools` 包含也要移除的工具 |
-| `inherit_context` | boolean | 是否 fork 父会话历史 |
-| `run_in_background` | boolean | 是否默认后台运行 |
-| `isolated` | boolean | 是否只给内置工具 |
-| `isolation` | `"worktree"` | 是否在临时 git worktree 中运行 |
-| `persist_session` | boolean | 是否落盘会话；默认 `false`（non-persistent），`true` 时支持 `resume` |
-| `session_dir` | string | 自定义会话目录；默认 `.pi/subagents/` |
-| `output_transcript` | boolean | 是否写 `.output` transcript |
-| `enabled` | boolean | `false` 禁用该 agent |
+| --- | --- | --- |
+| `description` | string | 角色列表和工具 schema 使用的描述 |
+| `model` | string / string[] | 固定模型或偏好列表 |
+| `thinking` | string | 默认 thinking level |
+| `max_turns` | number | 每条入站消息触发运行时的 turn 上限 |
+| `tools` | CSV | 工作工具白名单 |
+| `extensions` | boolean / CSV | 普通扩展继承策略 |
+| `exclude_extensions` | CSV | 普通扩展黑名单 |
+| `skills` | boolean / CSV | skills 继承策略 |
+| `disallowed_tools` | CSV | 工作工具黑名单 |
+| `inherit_context` | boolean | 创建时是否 fork Primary 会话历史 |
+| `isolated` | boolean | 是否只加载允许的内置工作工具 |
+| `isolation` | `"worktree"` | 是否默认使用 Agent 专属 worktree |
+| `enabled` | boolean | 是否允许创建该角色 |
 
-### 5. 命名与匹配
+所有 Agent 都是后台且持久的，因此不支持 `run_in_background`、`persist_session`、`session_dir` 和 `output_transcript`。
 
-- 文件名（不含 `.md`）作为 `subagent_type` 名称，大小写不敏感匹配。
-- 自定义 `explorer.md` 覆盖内置 `explorer`；自定义 `general-purpose.md` 覆盖内置 `general-purpose`。
-- 命名冲突时，先匹配项目级，再工作区级，再全局级，最后内置。
+### 5. Spawned Agent 加载受限协作扩展
 
-### 6. 无 JSON 配置文件
+通过 `Agent` 工具创建的 pi 进程加载专用 agent extension。无论 definition 如何限制工作工具，它始终提供：
 
-所有 per-agent 配置都走 markdown frontmatter。全局行为（如并发数）如需调整，也优先通过扩展自己的代码常量 + 环境变量处理，不引入 `.pi/herdr.json`。
+- `ListAgents`
+- `SendMessage`
 
-### 7. 子 session 不加载 pi-herdr 扩展
+它不提供：
 
-subagent 的 pi 进程默认不加载 pi-herdr 扩展，因此子 agent 没有 `Agent` / `get_subagent_result` / `steer_subagent` / `ListAgents` / `SendMessage` 工具。这样实现两层效果：
+- `Agent`
+- stop/remove Agent runtime 的能力
+- Primary 专用 UI 和 supervisor 控制工具
 
-- **防止自繁殖**：subagent 不能再 spawn 新的 subagent，避免无限递归。
-- **最小工具集**：子 agent 只拿到它自己的 agent frontmatter 允许的工具，不会意外调用 pi-herdr 的控制面。
+这样 Agent 可以发现所有 herdr 可达会话、直接回复和协作，但不能递归创建下级 Agent。
 
-如果需要让 subagent 也能 spawn subagent（嵌套），需要显式开启并重新设计；本设计不做。
+### 6. Explorer 保留 Bash
 
-## 后果
+Bundled Explorer 获得 Bash、read、grep、find 和 ls，以支持 `rg`、Git 查询、文件统计和批量分析；它不获得 edit 或 write。角色正文要求 Bash 只用于读取和分析，不创建、修改或删除文件。
+
+用户可以通过同名自定义 Markdown 调整工具范围；加载器和 `/agents` UI 必须展示最终有效工具集，使权限变化可见。
 
 ## 备选方案
 
-| 方案 | 说明 | 未采纳原因 |
-| ---- | ---- | ---------- |
-| JSON 配置文件（如 `.pi/herdr.json`） | 把 agent 配置、模型偏好、常量都放在一个 JSON 里 | 用户希望配置走 `.pi/agents/` / `.agents/agents/` / `~/.pi/agent/agents/` 的 markdown frontmatter |
-| 只支持 `.pi/agents/` | 跟 pi 生态一致 | 用户希望支持跨项目共享的 `.agents/agents/` workspace |
-| 只支持 `.agents/agents/` | 避免 `.pi` 目录 | 跟 pi-subagents 不一致，且项目级特化配置也是合理需求 |
-| 内置 `Plan` agent | 跟 pi-subagents 一样内置三个默认 agent | 用户明确只要 `explorer` 和 `general-purpose` |
-| 支持嵌套 subagent（`allowed_subagents`） | 让 subagent 也能 spawn subagent | 增加 supervisor 和工具所有权复杂度；当前设计不做 |
-| 支持 `memory` 持久化记忆 | 跟 pi-subagents 的 `memory` 字段 | Claude Code 没有这个概念，且增加目录管理复杂度 |
+| 方案 | 未采纳原因 |
+| --- | --- |
+| 在 TypeScript 中 hardcode 两个角色 | 难以阅读、发布验证和被普通 Markdown 覆盖 |
+| definition 替换完整 system prompt | 自定义角色可能丢失消息、身份和生命周期协议 |
+| Spawned Agent 完全不加载 pi-herdr | 无法使用 `ListAgents` 和 `SendMessage`，与复用和直接回复目标冲突 |
+| 给 spawned Agent 加载完整控制面 | 会允许递归创建和操作其他 Agent runtime |
+| 为了绝对只读而移除 Bash | 会明显妨碍代码搜索、Git 调查和批量文件分析 |
+
+## 后果
 
 ### 正面
 
-- 与 pi-subagents 对齐，用户迁移成本低。
-- 同时支持项目级 `.pi/agents/` 和工作区级 `.agents/agents/`，兼顾项目特化与跨项目共享。
-- 自定义 agent 可完全覆盖内置 agent，灵活度高。
+- Bundled 和自定义角色使用同一格式与解析路径。
+- 角色 prompt 与团队协议分离，覆盖 definition 不破坏控制面。
+- npm tarball 可以直接检查实际发布的 Agent 定义。
 
 ### 负面
 
-- 同时扫描 `.pi/agents/` 和 `.agents/agents/` 两处路径，加载逻辑比 pi-subagents 略复杂。
-- frontmatter 字段较多，需要文档和校验错误提示。
+- 构建和发布流程必须显式携带非 TypeScript 资源。
+- 需要维护 Primary extension 与 agent extension 两套工具表面。
 
 ### 未解决
 
