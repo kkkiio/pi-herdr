@@ -167,7 +167,6 @@ function createSupervisor(options: { definition?: ResolvedAgentDefinition; envir
 	const selectedDefinition = options.definition ?? definition();
 	const definitions = {
 		load: vi.fn(async () => selectedDefinition),
-		loadBundled: vi.fn(async () => (selectedDefinition.source === "bundled" ? selectedDefinition : definition())),
 	};
 	const runtime = {
 		resolveLaunchPlan: vi.fn(() => ({ args: ["--name", "worker"], model: "models/coder" })),
@@ -193,7 +192,7 @@ function launchContext(): ExtensionContext {
 const request = {
 	description: "Investigate the implementation",
 	prompt: "Inspect the relevant modules.",
-	agent_type: "explorer",
+	definition: "explorer",
 	name: "worker",
 } as const;
 
@@ -248,7 +247,7 @@ describe("AgentSupervisor launch transactions", () => {
 	it("uses worktree.create's returned root pane and renames its returned tab before starting Pi", async () => {
 		const harness = createSupervisor();
 
-		await harness.supervisor.launch({ ...request, isolation: "worktree" }, launchContext());
+		await harness.supervisor.launch({ ...request, cwd: "packages/api", isolation: "worktree" }, launchContext());
 
 		expect(harness.operations.map((operation) => `${operation.kind}:${operation.method}`)).toEqual([
 			"read:ping",
@@ -264,7 +263,7 @@ describe("AgentSupervisor launch transactions", () => {
 			"tracked:updateTrackedPanes",
 		]);
 		expect(harness.requestMutation).toHaveBeenNthCalledWith(1, "worktree.create", {
-			workspace_id: "w1",
+			cwd: "/workspace/packages/api",
 			label: "worker",
 			focus: false,
 		});
@@ -276,6 +275,29 @@ describe("AgentSupervisor launch transactions", () => {
 			3,
 			"agent.start",
 			expect.objectContaining({ pane_id: "w2:p1" }),
+		);
+	});
+
+	it("resolves definition and cwd independently from the Primary call cwd", async () => {
+		const harness = createSupervisor({ definition: definition({ source: "path", path: "/roles/reviewer.md" }) });
+
+		await harness.supervisor.launch(
+			{ ...request, definition: "../roles/reviewer.md", cwd: "../target" },
+			launchContext(),
+		);
+
+		expect(harness.definitions.load).toHaveBeenCalledWith("../roles/reviewer.md", "/workspace");
+		expect(harness.requestMutation).toHaveBeenNthCalledWith(1, "tab.create", {
+			workspace_id: "w1",
+			cwd: "/target",
+			label: "worker",
+			focus: false,
+		});
+		expect(harness.runtime.resolveLaunchPlan).toHaveBeenCalledWith(
+			"worker",
+			expect.objectContaining({ path: "/roles/reviewer.md" }),
+			expect.objectContaining({ cwd: "../target", definition: "../roles/reviewer.md" }),
+			expect.objectContaining({ cwd: "/workspace" }),
 		);
 	});
 

@@ -44,12 +44,14 @@ export default function piHerdrExtension(pi: ExtensionAPI): void {
 				await supervisor.refresh();
 			},
 		});
-		const definitions = new AgentDefinitionStore({ cwd: ctx.cwd });
+		const definitions = new AgentDefinitionStore();
 		const runtime = new AgentRuntime(fileURLToPath(import.meta.url));
 		supervisor = new AgentSupervisor(client, definitions, runtime, callerPaneId);
-		registerAgentTools(pi, supervisor, role);
+		const catalog = role === "primary" ? await definitions.catalog() : { entries: [], diagnostics: [] };
+		registerAgentTools(pi, supervisor, role, catalog.entries);
 		if (role === "primary") {
 			registerAgentsUi(pi, supervisor);
+			for (const diagnostic of catalog.diagnostics) ctx.ui.notify(diagnostic, "error");
 			const diagnostic = await supervisor.configurationDiagnostic(ctx.cwd);
 			if (diagnostic) ctx.ui.notify(diagnostic, "error");
 		} else {
@@ -92,7 +94,12 @@ export default function piHerdrExtension(pi: ExtensionAPI): void {
 }
 
 export { AgentDefinitionStore } from "./agent-definitions.js";
-export type { AgentDefinition, ResolvedAgentDefinition } from "./agent-definitions.js";
+export type {
+	AgentDefinition,
+	AgentDefinitionCatalog,
+	AgentDefinitionCatalogEntry,
+	ResolvedAgentDefinition,
+} from "./agent-definitions.js";
 export { AgentRuntime, SpawnedNameSynchronizer } from "./agent-runtime.js";
 export type { AgentLaunchPlan, AgentOverrides, ThinkingLevel } from "./agent-runtime.js";
 export { AgentSupervisor } from "./agent-supervisor.js";

@@ -12,8 +12,9 @@ import type { AgentInfo, HerdrEvent, SessionSnapshot } from "./herdr-types.js";
 export interface LaunchAgentRequest extends AgentOverrides {
 	description: string;
 	prompt: string;
-	agent_type: string;
+	definition: string;
 	name: string;
+	cwd?: string;
 	isolation?: "worktree";
 }
 
@@ -94,12 +95,15 @@ export class AgentSupervisor {
 		if (
 			typeof request.description !== "string" ||
 			typeof request.prompt !== "string" ||
-			typeof request.agent_type !== "string" ||
+			typeof request.definition !== "string" ||
 			!request.description.trim() ||
 			!request.prompt.trim() ||
-			!request.agent_type.trim()
+			!request.definition.trim()
 		) {
-			throw new Error("description, prompt, and agent_type must contain visible text.");
+			throw new Error("description, prompt, and definition must contain visible text.");
+		}
+		if (request.cwd !== undefined && (typeof request.cwd !== "string" || !request.cwd.trim())) {
+			throw new Error("cwd must contain visible text when provided.");
 		}
 		if (typeof request.name !== "string" || !/^[a-z][a-z0-9_-]{0,31}$/.test(request.name)) {
 			throw new Error("Agent name must match [a-z][a-z0-9_-]{0,31].");
@@ -108,15 +112,16 @@ export class AgentSupervisor {
 		await this.initialize();
 		if (ctx.signal?.aborted) throw new Error("Agent launch was cancelled before resources were created.");
 
+		const requestedCwd = resolve(ctx.cwd, request.cwd ?? ctx.cwd);
 		const ownedBeforeRead = new Set(this.owned.keys());
 		const [configuration, callerResult, agentsResult, definition] = await Promise.all([
 			this.readConfiguration(ctx.cwd),
 			this.client.requestRead("agent.get", { target: this.callerPaneId }, ctx.signal),
 			this.client.requestRead("agent.list", {}, ctx.signal),
-			this.definitions.load(request.agent_type),
+			this.definitions.load(request.definition, ctx.cwd),
 		]);
 		if (definition.enabled === false) {
-			throw new Error(`Agent definition ${request.agent_type} is disabled.`);
+			throw new Error(`Agent definition ${request.definition} is disabled.`);
 		}
 		const livePanes = new Set(agentsResult.agents.map((agent) => agent.pane_id));
 		for (const paneId of ownedBeforeRead) {
@@ -138,28 +143,26 @@ export class AgentSupervisor {
 		}
 		this.launchReservations.add(request.name);
 
-		let bundledDefinition: ResolvedAgentDefinition | undefined;
 		let createdTabId: string | undefined;
 		let createdPaneId: string | undefined;
 		let createdWorktreeWorkspaceId: string | undefined;
-		let launchCwd = ctx.cwd;
+		let launchCwd = requestedCwd;
 		let launchSessionDirectory = configuration.sessionDirectory;
 		let startedAgent: AgentInfo | undefined;
 		try {
-			bundledDefinition = await this.definitions.loadBundled(request.agent_type);
-			const plan = this.runtime.resolveLaunchPlan(request.name, definition, bundledDefinition, request, ctx);
+			const plan = this.runtime.resolveLaunchPlan(request.name, definition, request, ctx);
 			if (ctx.signal?.aborted) throw new Error("Agent launch was cancelled before resources were created.");
 
 			if (request.isolation === "worktree") {
 				const created = await this.client.requestMutation("worktree.create", {
-					workspace_id: callerResult.agent.workspace_id,
+					cwd: requestedCwd,
 					label: request.name,
 					focus: false,
 				});
 				createdWorktreeWorkspaceId = created.workspace.workspace_id;
 				createdTabId = created.tab.tab_id;
 				createdPaneId = created.root_pane.pane_id;
-				launchCwd = created.worktree.path || ctx.cwd;
+				launchCwd = created.worktree.path || requestedCwd;
 				if (!this.environment.PI_CODING_AGENT_SESSION_DIR) {
 					launchSessionDirectory = (await this.readConfiguration(launchCwd)).sessionDirectory;
 				}
@@ -167,7 +170,7 @@ export class AgentSupervisor {
 			} else {
 				const created = await this.client.requestMutation("tab.create", {
 					workspace_id: callerResult.agent.workspace_id,
-					cwd: ctx.cwd,
+					cwd: requestedCwd,
 					label: request.name,
 					focus: false,
 				});

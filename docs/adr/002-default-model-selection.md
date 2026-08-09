@@ -32,9 +32,8 @@ Bundled general-purpose 不指定 model，因此初始模型直接继承 Primary
 ### 3. Selection precedence
 
 1. `Agent({ model })` 显式参数。
-2. 当前 root 中选中的自定义 definition。
-3. bundled definition。
-4. Primary 当前模型。
+2. 当前选中的 definition 中的候选。
+3. Primary 当前模型。
 
 Definition 在创建时固定；已有 Agent 不因 Markdown 文件变化而重新解析模型。
 

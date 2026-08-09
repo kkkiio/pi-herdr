@@ -1,6 +1,6 @@
 # Architecture
 
-pi-herdr 是 herdr live session 上的轻量 Agent 协作层。Primary 创建后台 Agent，每个 Agent 使用独立 tab、受管 pane 和正常落盘的全新 pi session；通信、发现和状态都以当前 socket 可见的 runtime 为边界。
+pi-herdr 是 Pi 对 Herdr 原生 live Agent 控制面的接入层。Primary 创建后台 Agent，每个 Agent 使用独立 tab、受管 pane 和正常落盘的全新 Pi session；通信、发现和状态都以当前 socket 可见的 runtime 为边界。
 
 ```text
 Herdr live session
@@ -45,7 +45,7 @@ src/
 - `index.ts`：读取 runtime role、环境与设置，装配同一个 extension 的 Primary/Spawned 工具表面。
 - `agent-supervisor.ts`：管理当前 Primary 创建的 live Agent 内存记录、容量、snapshot reconciliation、事件和创建回滚。
 - `agent-runtime.ts`：构造 pi 启动参数、system prompt、消息 envelope 与 rename 同步。
-- `agent-definitions.ts`：严格发现、解析并固定 Markdown definition。
+- `agent-definitions.ts`：构建用户级/bundled catalog，解析显式项目路径并执行来源相关的严格 Markdown schema。
 - `herdr-client.ts`：类型化 socket RPC、专用事件订阅连接和只读重试。
 - `herdr-types.ts`：固定 Herdr 0.7.5 / protocol 17 的 request、response、snapshot 与 event wire types。
 - `tools.ts`：实现 `Agent`、`StopAgent`、`ListAgents` 与 `SendMessage`。
@@ -77,15 +77,15 @@ event socket 重连后，supervisor 通过 `session.snapshot` 删除已经不 li
 
 共享 workspace 创建流程：
 
-1. 校验环境、设置、definition、name 和初始模型。
+1. 校验环境、设置、definition selector、cwd、name 和初始模型。
 2. 检查当前 Primary 的 live Agent 数量。
-3. `tab.create` 创建不抢焦点的 name tab，并取得 root pane。
+3. `tab.create` 使用解析后的 cwd 创建不抢焦点的 name tab，并取得 root pane。
 4. `agent.start` 启动全新持久 Pi session；Spawned role 与 definition 配置都通过 Pi args 传入。
 5. raw `agent.start` 返回的 Agent 可能仍为 `launch_pending`。运行时只用幂等的 `agent.get` 轮询，直到 `launch_pending: false` 且 `interactive_ready: true`。
 6. `agent.prompt` 投递带 `<from ...>` envelope 的初始请求。
 7. 只有 prompt 被 Herdr 接受后才写入内存记录并返回 `launched`。
 
-Worktree 流程用 `worktree.create` 替换第 3 步，直接复用其返回的 workspace、tab 和 root pane，再显式调用 `tab.rename` 同步 Agent name；`worktree.create` 的 label 不能替代这一步。
+Worktree 流程用传入同一 cwd 的 `worktree.create` 替换第 3 步，直接复用其返回的 workspace、tab 和 root pane，再显式调用 `tab.rename` 同步 Agent name；`worktree.create` 的 label 不能替代这一步。Definition 文件位置不参与 cwd 或 worktree 选择。
 
 Worktree 创建失败回滚先以 `force: false` 调用 `worktree.remove`；只有安全移除失败时才继续 `pane.close`，避免先关闭 workspace 后丢失 Herdr 的安全移除上下文。共享 workspace 创建失败关闭本次新建的 tab。只有 runtime 已确认关闭，且 `agent.start` 已暴露本次新建 Pi session 的 `herdr:pi` 绝对 `.jsonl` path、该 path 位于 Pi 实际 session directory 内时，回滚才删除这个精确文件。目录解析遵循 Spawned Pi 使用的 `PI_CODING_AGENT_SESSION_DIR` > 项目覆盖后的 `settings.json#sessionDir` > agent directory `sessions/`；若 close 结果不确定则保留 session，不扫描或按名字猜测其他 session。任何无法验证或完成的清理都会保留现场，并把 workspace、pane 或 session 残留合并进最终错误。
 

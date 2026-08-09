@@ -2,13 +2,22 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 import type { AgentSupervisor } from "./agent-supervisor.js";
+import type { AgentDefinitionCatalogEntry } from "./agent-definitions.js";
 import { THINKING_LEVELS } from "./agent-runtime.js";
 
 export type RuntimeRole = "primary" | "spawned";
 
-export function registerAgentTools(pi: ExtensionAPI, supervisor: AgentSupervisor, role: RuntimeRole): void {
+export function registerAgentTools(
+	pi: ExtensionAPI,
+	supervisor: AgentSupervisor,
+	role: RuntimeRole,
+	catalog: readonly AgentDefinitionCatalogEntry[] = [],
+): void {
 	const thinkingSchema = Type.Union(THINKING_LEVELS.map((level) => Type.Literal(level)));
 	if (role === "primary") {
+		const catalogDescription = catalog.length
+			? catalog.map((entry) => `${entry.name}${entry.description ? ` — ${entry.description}` : ""}`).join("; ")
+			: "none";
 		pi.registerTool({
 			name: "Agent",
 			label: "Agent",
@@ -17,13 +26,17 @@ export function registerAgentTools(pi: ExtensionAPI, supervisor: AgentSupervisor
 			promptSnippet: "Launch a persistent background Agent in Herdr.",
 			promptGuidelines: [
 				"Give every Agent a unique lowercase name matching [a-z][a-z0-9_-]{0,31}.",
+				"When a project-specific role would help, prefer checking the task-relevant repository's .pi/agents and .agents/agents directories and pass the selected Markdown path explicitly; otherwise use a catalog definition.",
 				"Use isolation=worktree only when the Agent needs an independent Git checkout.",
 			],
 			parameters: Type.Object(
 				{
 					description: Type.String({ minLength: 1, description: "Short human-readable purpose." }),
 					prompt: Type.String({ minLength: 1, description: "The first concrete request for the Agent." }),
-					agent_type: Type.String({ minLength: 1, description: "Agent definition name, such as explorer." }),
+					definition: Type.String({
+						minLength: 1,
+						description: `Catalog name or absolute/explicit relative .md path. Available catalog: ${catalogDescription}`,
+					}),
 					name: Type.String({
 						pattern: "^[a-z][a-z0-9_-]{0,31}$",
 						description: "Unique live Agent, session, and tab name.",
@@ -32,6 +45,9 @@ export function registerAgentTools(pi: ExtensionAPI, supervisor: AgentSupervisor
 						Type.Union([Type.String({ minLength: 1 }), Type.Array(Type.String({ minLength: 1 }), { minItems: 1 })]),
 					),
 					thinking: Type.Optional(thinkingSchema),
+					cwd: Type.Optional(
+						Type.String({ minLength: 1, description: "Spawned Agent cwd, resolved independently from definition." }),
+					),
 					isolation: Type.Optional(Type.Literal("worktree")),
 				},
 				{ additionalProperties: false },

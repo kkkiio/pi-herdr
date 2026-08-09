@@ -154,46 +154,47 @@ Then("the Spawned RPC session exposes exactly two pi-herdr tools and no agents c
 	);
 });
 
-Given("a malformed project definition shadows a valid bundled definition", async function (this: PiHerdrWorld) {
+Given("a malformed global definition shadows a valid bundled definition", async function (this: PiHerdrWorld) {
 	const sandbox = await this.prepareSandbox();
 	const root = join(sandbox, "project");
+	const globalDir = join(sandbox, "global");
 	const bundledDir = join(sandbox, "package", "agents");
 	await Promise.all([
-		mkdir(join(root, ".pi", "agents"), { recursive: true }),
-		mkdir(join(root, ".agents", "agents"), { recursive: true }),
-		mkdir(join(sandbox, "global"), { recursive: true }),
+		mkdir(root, { recursive: true }),
+		mkdir(globalDir, { recursive: true }),
 		mkdir(bundledDir, { recursive: true }),
 	]);
 	await Promise.all([
 		writeFile(
-			join(root, ".pi", "agents", "reviewer.md"),
+			join(globalDir, "reviewer.md"),
 			"---\ndescription: selected\nlegacy_worktree: true\n---\ninvalid",
 			"utf8",
 		),
 		writeFile(join(bundledDir, "reviewer.md"), "---\ndescription: bundled\n---\nvalid", "utf8"),
 	]);
-	this.state.set("definitionStore", new AgentDefinitionStore({ root, globalDir: join(sandbox, "global"), bundledDir }));
+	this.state.set("definitionStore", new AgentDefinitionStore({ globalDir, bundledDir }));
+	this.state.set("definitionCwd", root);
 });
 
 When("the selected definition is loaded", async function (this: PiHerdrWorld) {
 	const store = this.state.get("definitionStore") as AgentDefinitionStore;
 	try {
-		await store.load("reviewer");
-		assert.fail("Expected the selected project definition to fail strict validation.");
+		await store.load("reviewer", String(this.state.get("definitionCwd")));
+		assert.fail("Expected the selected global definition to fail strict validation.");
 	} catch (error) {
 		this.state.set("definitionError", error);
 	}
 });
 
-Then("definition loading reports the project schema error", function (this: PiHerdrWorld) {
+Then("definition loading reports the global schema error", function (this: PiHerdrWorld) {
 	const error = this.state.get("definitionError");
 	assert.ok(error instanceof Error);
-	assert.match(error.message, /project.*\.pi.*reviewer\.md|reviewer\.md/);
+	assert.match(error.message, /global.*reviewer\.md|reviewer\.md/);
 	assert.match(error.message, /unknown field "legacy_worktree"/);
 	assert.doesNotMatch(error.message, /bundled/);
 });
 
-Given("a custom definition without a model and authenticated Primary models", function (this: PiHerdrWorld) {
+Given("selected definitions and authenticated Primary models", function (this: PiHerdrWorld) {
 	const primary = { provider: "acme", id: "primary-model" };
 	const matched = { provider: "acme", id: "gpt-5-mini" };
 	const context = {
@@ -203,46 +204,41 @@ Given("a custom definition without a model and authenticated Primary models", fu
 	} as unknown as ExtensionContext;
 	const definition: ResolvedAgentDefinition = {
 		name: "worker",
-		source: "project-pi",
+		source: "path",
 		path: "/project/.pi/agents/worker.md",
 		prompt: "Implement the request.",
+		model: ["acme/not-authenticated", "ACME/gpt.5.mini"],
 	};
 	this.state.set("modelContext", context);
 	this.state.set("customDefinition", definition);
 });
 
-When("launch plans are resolved from bundled model preferences", function (this: PiHerdrWorld) {
+When("launch plans are resolved from selected definition preferences", function (this: PiHerdrWorld) {
 	const runtime = new AgentRuntime("/package/dist/index.js");
 	const context = this.state.get("modelContext") as ExtensionContext;
 	const definition = this.state.get("customDefinition") as ResolvedAgentDefinition;
-	const matchingBundled: ResolvedAgentDefinition = {
+	const unavailableDefinition: ResolvedAgentDefinition = {
 		...definition,
-		source: "bundled",
-		model: ["acme/not-authenticated", "ACME/gpt.5.mini"],
-	};
-	const unavailableBundled: ResolvedAgentDefinition = {
-		...definition,
-		source: "bundled",
 		model: ["acme/not-authenticated"],
 	};
-	this.state.set("matchingPlan", runtime.resolveLaunchPlan("worker", definition, matchingBundled, {}, context));
-	this.state.set("fallbackPlan", runtime.resolveLaunchPlan("worker", definition, unavailableBundled, {}, context));
+	this.state.set("matchingPlan", runtime.resolveLaunchPlan("worker", definition, {}, context));
+	this.state.set("fallbackPlan", runtime.resolveLaunchPlan("worker", unavailableDefinition, {}, context));
 	try {
-		runtime.resolveLaunchPlan("worker", definition, matchingBundled, { model: "acme/not-authenticated" }, context);
+		runtime.resolveLaunchPlan("worker", definition, { model: "acme/not-authenticated" }, context);
 		assert.fail("Expected an unavailable explicit model override to fail.");
 	} catch (error) {
 		this.state.set("explicitModelError", error);
 	}
 });
 
-Then("the first matching normalized bundled model is selected", function (this: PiHerdrWorld) {
+Then("the first matching normalized definition model is selected", function (this: PiHerdrWorld) {
 	const plan = this.state.get("matchingPlan") as ReturnType<AgentRuntime["resolveLaunchPlan"]>;
 	assert.equal(plan.model, "acme/gpt-5-mini");
 	const modelIndex = plan.args.indexOf("--model");
 	assert.equal(plan.args[modelIndex + 1], "acme/gpt-5-mini");
 });
 
-Then("unavailable bundled models inherit the Primary model", function (this: PiHerdrWorld) {
+Then("unavailable definition models inherit the Primary model", function (this: PiHerdrWorld) {
 	const plan = this.state.get("fallbackPlan") as ReturnType<AgentRuntime["resolveLaunchPlan"]>;
 	assert.equal(plan.model, "acme/primary-model");
 });

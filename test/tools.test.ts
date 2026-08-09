@@ -6,11 +6,12 @@ import { registerAgentTools } from "../src/tools.js";
 
 interface RegisteredTool {
 	name: string;
+	promptGuidelines?: string[];
 	parameters: Record<string, any>;
 	execute: (...args: any[]) => Promise<{ content: Array<{ type: string; text: string }>; details: unknown }>;
 }
 
-function setup(role: "primary" | "spawned") {
+function setup(role: "primary" | "spawned", catalog: Array<{ name: string; description?: string }> = []) {
 	const tools: RegisteredTool[] = [];
 	const pi = {
 		registerTool: vi.fn((tool) => tools.push(tool)),
@@ -21,7 +22,7 @@ function setup(role: "primary" | "spawned") {
 		list: vi.fn(async () => ({ agents: [{ pane_id: "w1:p2", type: "agent" }] })),
 		send: vi.fn(async () => ({ delivered: true, agent: { pane_id: "w1:p2" } })),
 	} as unknown as AgentSupervisor;
-	registerAgentTools(pi, supervisor, role);
+	registerAgentTools(pi, supervisor, role, catalog);
 	return { tools, supervisor: supervisor as any };
 }
 
@@ -35,15 +36,21 @@ function schema(tool: RegisteredTool) {
 }
 
 describe("registerAgentTools schemas", () => {
-	it("registers the closed Primary surface with model, thinking, name, and isolation constraints", () => {
-		const { tools } = setup("primary");
+	it("registers the closed Primary surface with definition catalog, cwd, and launch constraints", () => {
+		const { tools } = setup("primary", [
+			{ name: "explorer", description: "Read-only search" },
+			{ name: "general-purpose", description: "Implementation" },
+		]);
 
 		expect(tools.map((tool) => tool.name)).toEqual(["Agent", "StopAgent", "ListAgents", "SendMessage"]);
 		for (const tool of tools) {
 			expect(schema(tool)).toMatchObject({ type: "object", additionalProperties: false });
 		}
 		const agent = schema(tools.find((tool) => tool.name === "Agent")!);
-		expect(agent.required).toEqual(["description", "prompt", "agent_type", "name"]);
+		expect(agent.required).toEqual(["description", "prompt", "definition", "name"]);
+		expect(agent.properties.definition.description).toContain("explorer — Read-only search");
+		expect(agent.properties.definition.description).toContain("general-purpose — Implementation");
+		expect(agent.properties.cwd).toBeDefined();
 		expect(agent.properties.name.pattern).toBe("^[a-z][a-z0-9_-]{0,31}$");
 		expect(agent.properties.model.anyOf).toHaveLength(2);
 		expect(agent.properties.thinking.anyOf.map((choice: { const: string }) => choice.const)).toEqual([
@@ -56,6 +63,10 @@ describe("registerAgentTools schemas", () => {
 			"max",
 		]);
 		expect(agent.properties.isolation).toMatchObject({ const: "worktree" });
+		expect(tools.find((tool) => tool.name === "Agent")?.promptGuidelines?.join("\n")).toMatch(
+			/\.pi\/agents.*\.agents\/agents/,
+		);
+		expect(tools.find((tool) => tool.name === "Agent")?.promptGuidelines?.join("\n")).not.toMatch(/AGENTS\.md/);
 		expect(schema(tools.find((tool) => tool.name === "StopAgent")!).required).toEqual(["agent"]);
 		expect(schema(tools.find((tool) => tool.name === "ListAgents")!).properties).toEqual({});
 		expect(schema(tools.find((tool) => tool.name === "SendMessage")!).required).toEqual(["agent", "message"]);
@@ -78,8 +89,9 @@ describe("registerAgentTools execution bridge", () => {
 		const params = {
 			description: "task",
 			prompt: "implement",
-			agent_type: "explorer",
+			definition: "explorer",
 			name: "worker",
+			cwd: "../target",
 			model: ["first", "second"],
 			thinking: "high",
 			isolation: "worktree",
@@ -101,7 +113,7 @@ describe("registerAgentTools execution bridge", () => {
 		await expect(
 			tool.execute(
 				"call-1",
-				{ description: "task", prompt: "implement", agent_type: "explorer", name: "worker" },
+				{ description: "task", prompt: "implement", definition: "explorer", name: "worker" },
 				controller.signal,
 				undefined,
 				{ cwd: "/project" },

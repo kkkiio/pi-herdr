@@ -1,7 +1,6 @@
-import { execFileSync } from "node:child_process";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 
@@ -10,15 +9,15 @@ export interface AgentDefinition {
 	model?: string | string[];
 	thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 	tools?: string[];
-	extensions?: boolean | string[];
-	skills?: boolean | string[];
+	extensions?: boolean;
+	skills?: boolean;
 	disallowed_tools?: string[];
 	enabled?: boolean;
 }
 
 export interface ResolvedAgentDefinition extends AgentDefinition {
 	name: string;
-	source: "project-pi" | "project-agents" | "global" | "bundled";
+	source: "path" | "global" | "bundled";
 	path: string;
 	prompt: string;
 }
@@ -30,70 +29,130 @@ interface DefinitionLocation {
 	directory: string;
 }
 
+export interface AgentDefinitionCatalogEntry {
+	name: string;
+	description?: string;
+}
+
+export interface AgentDefinitionCatalog {
+	entries: AgentDefinitionCatalogEntry[];
+	diagnostics: string[];
+}
+
 /** Finds and strictly validates agent definitions without caching file contents. */
 export class AgentDefinitionStore {
-	readonly root: string;
-
 	private readonly globalDir: string;
 	private readonly bundledDir: string;
 
 	constructor(
 		options: {
-			cwd?: string;
-			root?: string;
 			globalDir?: string;
 			bundledDir?: string;
 		} = {},
 	) {
-		const cwd = resolve(options.cwd ?? process.cwd());
-		let detectedRoot = cwd;
-
-		if (options.root === undefined) {
-			try {
-				const topLevel = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-					cwd,
-					encoding: "utf8",
-					stdio: ["ignore", "pipe", "ignore"],
-				}).trim();
-				if (topLevel.length > 0) {
-					detectedRoot = topLevel;
-				}
-			} catch {
-				detectedRoot = cwd;
-			}
-		}
-
-		this.root = resolve(options.root ?? detectedRoot);
 		this.globalDir = resolve(options.globalDir ?? join(homedir(), ".pi", "agent", "agents"));
 		this.bundledDir = resolve(options.bundledDir ?? fileURLToPath(new URL("../agents", import.meta.url)));
 	}
 
-	async load(name: string): Promise<ResolvedAgentDefinition> {
-		const definition = await this.loadFromLocations(
-			name,
-			[
-				{ source: "project-pi", directory: join(this.root, ".pi", "agents") },
-				{ source: "project-agents", directory: join(this.root, ".agents", "agents") },
-				{ source: "global", directory: this.globalDir },
-				{ source: "bundled", directory: this.bundledDir },
-			],
-			false,
-		);
-
-		if (definition === undefined) {
-			throw new Error(`Agent definition "${name}" was not found`);
+	async load(selector: string, cwd: string): Promise<ResolvedAgentDefinition> {
+		if (typeof selector !== "string" || !selector.trim() || selector.trim() !== selector) {
+			throw new Error("Agent definition selector must contain visible text without surrounding whitespace.");
 		}
+		const explicitPath = isAbsolute(selector) || /^(?:\.\/|\.\.\/)/.test(selector);
+		if (explicitPath) {
+			if (!selector.toLowerCase().endsWith(".md")) {
+				throw new Error(`Explicit Agent definition path must end with .md: ${selector}`);
+			}
+			const definitionPath = isAbsolute(selector) ? resolve(selector) : resolve(cwd, selector);
+			const filename = basename(definitionPath);
+			return this.readDefinition(definitionPath, filename.slice(0, -3), "path");
+		}
+		if (selector.includes("/") || selector.includes("\\") || selector.toLowerCase().endsWith(".md")) {
+			throw new Error(
+				`Invalid Agent definition selector "${selector}"; use a catalog name or an absolute/explicit relative .md path.`,
+			);
+		}
+
+		const definition = await this.loadFromLocations(selector, [
+			{ source: "global", directory: this.globalDir },
+			{ source: "bundled", directory: this.bundledDir },
+		]);
+		if (definition === undefined) throw new Error(`Agent definition "${selector}" was not found`);
 		return definition;
 	}
 
-	async loadBundled(name: string): Promise<ResolvedAgentDefinition | undefined> {
-		return this.loadFromLocations(name, [{ source: "bundled", directory: this.bundledDir }], true);
+	async catalog(): Promise<AgentDefinitionCatalog> {
+		const entries: AgentDefinitionCatalogEntry[] = [];
+		const diagnostics: string[] = [];
+		const claimed = new Set<string>();
+		for (const location of [
+			{ source: "global" as const, directory: this.globalDir },
+			{ source: "bundled" as const, directory: this.bundledDir },
+		]) {
+			let directoryEntries;
+			try {
+				directoryEntries = await readdir(location.directory, { withFileTypes: true });
+			} catch (error) {
+				if (error instanceof Error && "code" in error && (error.code === "ENOENT" || error.code === "ENOTDIR")) {
+					continue;
+				}
+				diagnostics.push(
+					`Cannot catalog ${location.source} Agent definitions in ${location.directory}: ${error instanceof Error ? error.message : String(error)}`,
+				);
+				continue;
+			}
+			const grouped = Map.groupBy(
+				directoryEntries
+					.filter((entry) => !entry.isDirectory() && entry.name.toLowerCase().endsWith(".md"))
+					.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0)),
+				(entry) => entry.name.slice(0, -3).toLowerCase(),
+			);
+			for (const [normalizedName, matches] of [...grouped.entries()].sort(([left], [right]) =>
+				left < right ? -1 : left > right ? 1 : 0,
+			)) {
+				if (claimed.has(normalizedName)) continue;
+				claimed.add(normalizedName);
+				if (!normalizedName || matches.length > 1) {
+					diagnostics.push(
+						matches.length > 1
+							? `Conflicting ${location.source} Agent definitions for "${normalizedName}": ${matches.map((entry) => entry.name).join(", ")}`
+							: `Invalid ${location.source} Agent definition filename: ${matches[0]?.name ?? ".md"}`,
+					);
+					continue;
+				}
+				const selected = matches[0];
+				if (!selected) continue;
+				const selectedName = selected.name.slice(0, -3);
+				if (
+					selectedName.trim() !== selectedName ||
+					selectedName.includes("\\") ||
+					selectedName.toLowerCase().endsWith(".md")
+				) {
+					diagnostics.push(`Invalid ${location.source} Agent definition name: ${selected.name}`);
+					continue;
+				}
+				try {
+					const definition = await this.readDefinition(
+						join(location.directory, selected.name),
+						selectedName,
+						location.source,
+					);
+					if (definition.enabled === false) {
+						diagnostics.push(`Agent definition ${definition.name} is disabled: ${definition.path}`);
+						continue;
+					}
+					entries.push({ name: definition.name, description: definition.description });
+				} catch (error) {
+					diagnostics.push(error instanceof Error ? error.message : String(error));
+				}
+			}
+		}
+		return { entries, diagnostics };
 	}
 
 	private async loadFromLocations(
 		name: string,
 		locations: readonly DefinitionLocation[],
-		allowMissing: boolean,
 	): Promise<ResolvedAgentDefinition | undefined> {
 		if (
 			name.length === 0 ||
@@ -145,12 +204,7 @@ export class AgentDefinitionStore {
 			return this.readDefinition(join(location.directory, selected.name), selected.name.slice(0, -3), location.source);
 		}
 
-		if (allowMissing) {
-			return undefined;
-		}
-		throw new Error(
-			`Agent definition "${name}" was not found in ${locations.map((location) => location.directory).join(", ")}`,
-		);
+		return undefined;
 	}
 
 	private async readDefinition(
@@ -160,6 +214,8 @@ export class AgentDefinitionStore {
 	): Promise<ResolvedAgentDefinition> {
 		let content: string;
 		try {
+			const metadata = await stat(definitionPath);
+			if (!metadata.isFile()) throw new Error("path is not a regular file");
 			content = await readFile(definitionPath, "utf8");
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -243,24 +299,13 @@ export class AgentDefinitionStore {
 					break;
 				case "extensions":
 				case "skills": {
-					if (typeof value === "boolean") {
-						if (field === "extensions") {
-							definition.extensions = value;
-						} else {
-							definition.skills = value;
-						}
-						break;
+					if (typeof value !== "boolean") {
+						throw new Error(`Invalid agent definition ${definitionPath}: ${field} must be a boolean`);
 					}
-					if (!Array.isArray(value) || !value.every((resource) => typeof resource === "string" && resource.trim())) {
-						throw new Error(`Invalid agent definition ${definitionPath}: ${field} must be a boolean or string array`);
-					}
-					const resolvedResources = value.map((resource) =>
-						isAbsolute(resource) ? resource : resolve(dirname(definitionPath), resource),
-					);
 					if (field === "extensions") {
-						definition.extensions = resolvedResources;
+						definition.extensions = value;
 					} else {
-						definition.skills = resolvedResources;
+						definition.skills = value;
 					}
 					break;
 				}

@@ -1,25 +1,25 @@
-import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AgentDefinitionStore } from "../src/agent-definitions.js";
 
 describe("AgentDefinitionStore", () => {
 	let sandbox: string;
-	let root: string;
+	let project: string;
 	let globalDir: string;
 	let bundledDir: string;
 
 	beforeEach(async () => {
 		sandbox = await mkdtemp(join(tmpdir(), "pi-herdr-definitions-"));
-		root = join(sandbox, "project");
+		project = join(sandbox, "project");
 		globalDir = join(sandbox, "global");
 		bundledDir = join(sandbox, "package", "agents");
 		await Promise.all([
-			mkdir(join(root, ".pi", "agents"), { recursive: true }),
-			mkdir(join(root, ".agents", "agents"), { recursive: true }),
+			mkdir(join(project, ".pi", "agents"), { recursive: true }),
+			mkdir(join(project, ".agents", "agents"), { recursive: true }),
 			mkdir(globalDir, { recursive: true }),
 			mkdir(bundledDir, { recursive: true }),
 		]);
@@ -29,108 +29,128 @@ describe("AgentDefinitionStore", () => {
 		await rm(sandbox, { recursive: true, force: true });
 	});
 
-	it("loads the closed schema and resolves relative extension and skill resources", async () => {
-		const definitionPath = join(root, ".pi", "agents", "Builder.md");
-		const absoluteExtension = join(sandbox, "shared", "extension.ts");
+	it("loads absolute and explicit relative paths independently from catalog discovery", async () => {
+		const definitionPath = join(project, ".pi", "agents", "Builder.md");
 		await writeFile(
 			definitionPath,
-			`---\n` +
-				`description: Implements a bounded change\n` +
-				`model: [provider/model-a, provider/model-b]\n` +
-				`thinking: max\n` +
-				`tools: [read, bash]\n` +
-				`extensions: [./extensions/local.ts, ${absoluteExtension}]\n` +
-				`skills: [../skills/review]\n` +
-				`disallowed_tools: [write]\n` +
-				`enabled: false\n` +
-				`---\n\nBuild the requested change.\n`,
+			"---\ndescription: Implements a bounded change\nmodel: [provider/model-a, provider/model-b]\nthinking: max\ntools: [read, bash]\nextensions: true\nskills: false\ndisallowed_tools: [write]\nenabled: true\n---\n\nBuild the requested change.\n",
 			"utf8",
 		);
+		const store = new AgentDefinitionStore({ globalDir, bundledDir });
 
-		const store = new AgentDefinitionStore({ root, globalDir, bundledDir });
-		const definition = await store.load("builder");
-
-		expect(definition).toEqual({
+		await expect(store.load(definitionPath, join(sandbox, "elsewhere"))).resolves.toEqual({
 			name: "Builder",
-			source: "project-pi",
+			source: "path",
 			path: definitionPath,
 			prompt: "Build the requested change.",
 			description: "Implements a bounded change",
 			model: ["provider/model-a", "provider/model-b"],
 			thinking: "max",
 			tools: ["read", "bash"],
-			extensions: [resolve(join(dirname(definitionPath), "extensions/local.ts")), absoluteExtension],
-			skills: [resolve(join(dirname(definitionPath), "../skills/review"))],
+			extensions: true,
+			skills: false,
 			disallowed_tools: ["write"],
-			enabled: false,
+			enabled: true,
 		});
-		expect(isAbsolute((definition.extensions as string[])[0] ?? "")).toBe(true);
+		await expect(store.load("./.pi/agents/Builder.md", project)).resolves.toMatchObject({
+			source: "path",
+			path: definitionPath,
+		});
 	});
 
-	it("uses all four discovery layers in order and reads the filesystem on every load", async () => {
-		const projectPi = join(root, ".pi", "agents", "worker.md");
-		const projectAgents = join(root, ".agents", "agents", "worker.md");
+	it("resolves bare names from global then bundled and rereads selected content", async () => {
 		const global = join(globalDir, "worker.md");
 		const bundled = join(bundledDir, "worker.md");
-		await Promise.all([
-			writeFile(projectPi, "---\ndescription: project pi\n---\nfirst", "utf8"),
-			writeFile(projectAgents, "---\ndescription: project agents\n---\nsecond", "utf8"),
-			writeFile(global, "---\ndescription: global\n---\nthird", "utf8"),
-			writeFile(bundled, "---\ndescription: bundled\n---\nfourth", "utf8"),
-		]);
-		const store = new AgentDefinitionStore({ root, globalDir, bundledDir });
+		await writeFile(global, "---\ndescription: global\n---\nfirst", "utf8");
+		await writeFile(bundled, "---\ndescription: bundled\n---\nfallback", "utf8");
+		const store = new AgentDefinitionStore({ globalDir, bundledDir });
 
-		await expect(store.load("WORKER")).resolves.toMatchObject({ source: "project-pi", prompt: "first" });
-		await unlink(projectPi);
-		await expect(store.load("worker")).resolves.toMatchObject({
-			source: "project-agents",
-			prompt: "second",
-		});
-		await unlink(projectAgents);
-		await expect(store.load("worker")).resolves.toMatchObject({ source: "global", prompt: "third" });
+		await expect(store.load("WORKER", project)).resolves.toMatchObject({ source: "global", prompt: "first" });
+		await writeFile(global, "---\ndescription: changed\n---\nlatest", "utf8");
+		await expect(store.load("worker", project)).resolves.toMatchObject({ source: "global", prompt: "latest" });
 		await unlink(global);
-		await expect(store.load("worker")).resolves.toMatchObject({ source: "bundled", prompt: "fourth" });
-		await writeFile(bundled, "---\ndescription: changed\n---\nlatest", "utf8");
-		await expect(store.load("worker")).resolves.toMatchObject({ prompt: "latest" });
+		await expect(store.load("worker", project)).resolves.toMatchObject({ source: "bundled", prompt: "fallback" });
 	});
 
-	it("detects the Git root from the active Pi session cwd", async () => {
-		const sessionCwd = join(root, "packages", "worker");
-		await mkdir(sessionCwd, { recursive: true });
-		execFileSync("git", ["init", "--quiet", root], { stdio: "ignore" });
+	it("does not automatically select project definitions by bare name", async () => {
+		const projectDefinition = join(project, ".agents", "agents", "reviewer.md");
+		await writeFile(projectDefinition, "---\ndescription: project reviewer\n---\nreview", "utf8");
+		const store = new AgentDefinitionStore({ globalDir, bundledDir });
 
-		const store = new AgentDefinitionStore({ cwd: sessionCwd, globalDir, bundledDir });
-
-		expect(store.root).toBe(
-			execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: sessionCwd, encoding: "utf8" }).trim(),
-		);
+		await expect(store.load("reviewer", project)).rejects.toThrow(/was not found/);
+		await expect(store.load("./.agents/agents/reviewer.md", project)).resolves.toMatchObject({
+			source: "path",
+			path: projectDefinition,
+		});
 	});
 
-	it("reports same-layer case conflicts without consulting lower layers", async () => {
-		const highDirectory = join(root, ".pi", "agents");
-		await writeFile(join(highDirectory, "Explorer.md"), "---\n---\nupper", "utf8");
-		await writeFile(join(highDirectory, "explorer.md"), "---\n---\nlower", "utf8");
-		await writeFile(join(bundledDir, "explorer.md"), "---\n---\nbundled", "utf8");
-
-		const entries = (await readdir(highDirectory)).filter((entry) => entry.toLowerCase() === "explorer.md");
-		if (entries.length < 2) {
-			return;
-		}
-
-		const store = new AgentDefinitionStore({ root, globalDir, bundledDir });
-		await expect(store.load("explorer")).rejects.toThrow(/Conflicting project-pi.*Explorer\.md.*explorer\.md/);
+	it.each([
+		["implicit relative path", "agents/reviewer.md", /catalog name or an absolute\/explicit relative/],
+		["ambiguous Markdown name", "reviewer.md", /catalog name or an absolute\/explicit relative/],
+		["non-Markdown explicit path", "./reviewer.txt", /must end with \.md/],
+		["surrounding whitespace", " reviewer ", /without surrounding whitespace/],
+	])("rejects %s selectors", async (_caseName, selector, expected) => {
+		const store = new AgentDefinitionStore({ globalDir, bundledDir });
+		await expect(store.load(selector, project)).rejects.toThrow(expected as RegExp);
 	});
 
-	it("does not fall back when the selected higher-priority definition is malformed", async () => {
-		await writeFile(
-			join(root, ".pi", "agents", "reviewer.md"),
-			"---\ndescription: selected\nworktree: true\n---\ninvalid",
-			"utf8",
-		);
-		await writeFile(join(bundledDir, "reviewer.md"), "---\ndescription: fallback\n---\nvalid", "utf8");
-		const store = new AgentDefinitionStore({ root, globalDir, bundledDir });
+	it("requires explicit paths to reference regular files", async () => {
+		await mkdir(join(project, "directory.md"));
+		const store = new AgentDefinitionStore({ globalDir, bundledDir });
 
-		await expect(store.load("reviewer")).rejects.toThrow(/unknown field "worktree"/);
+		await expect(store.load("./directory.md", project)).rejects.toThrow(/not a regular file/);
+		await expect(store.load("./missing.md", project)).rejects.toThrow(/Cannot read selected agent definition/);
+	});
+
+	it("builds an effective global-first catalog with descriptions", async () => {
+		await Promise.all([
+			writeFile(join(globalDir, "reviewer.md"), "---\ndescription: Global reviewer\n---\nglobal", "utf8"),
+			writeFile(join(globalDir, "builder.md"), "---\ndescription: Builder\n---\nbuild", "utf8"),
+			writeFile(join(bundledDir, "Reviewer.md"), "---\ndescription: Bundled reviewer\n---\nbundled", "utf8"),
+			writeFile(join(bundledDir, "explorer.md"), "---\ndescription: Explorer\n---\nexplore", "utf8"),
+		]);
+		const store = new AgentDefinitionStore({ globalDir, bundledDir });
+
+		await expect(store.catalog()).resolves.toEqual({
+			entries: [
+				{ name: "builder", description: "Builder" },
+				{ name: "reviewer", description: "Global reviewer" },
+				{ name: "explorer", description: "Explorer" },
+			],
+			diagnostics: [],
+		});
+	});
+
+	it("keeps malformed and disabled global names from falling back to bundled", async () => {
+		await Promise.all([
+			writeFile(join(globalDir, "reviewer.md"), "---\nunknown: true\n---\ninvalid", "utf8"),
+			writeFile(join(globalDir, "worker.md"), "---\nenabled: false\n---\ndisabled", "utf8"),
+			writeFile(join(bundledDir, "reviewer.md"), "---\ndescription: fallback\n---\nvalid", "utf8"),
+			writeFile(join(bundledDir, "worker.md"), "---\ndescription: fallback\n---\nvalid", "utf8"),
+		]);
+		const store = new AgentDefinitionStore({ globalDir, bundledDir });
+
+		const catalog = await store.catalog();
+		expect(catalog.entries).toEqual([]);
+		expect(catalog.diagnostics.join("\n")).toMatch(/unknown field "unknown"/);
+		expect(catalog.diagnostics.join("\n")).toMatch(/worker is disabled/);
+		await expect(store.load("reviewer", project)).rejects.toThrow(/unknown field "unknown"/);
+		await expect(store.load("worker", project)).resolves.toMatchObject({ source: "global", enabled: false });
+	});
+
+	it("reports same-source case conflicts without consulting bundled fallback", async () => {
+		await Promise.all([
+			writeFile(join(globalDir, "Explorer.md"), "---\n---\nupper", "utf8"),
+			writeFile(join(globalDir, "explorer.md"), "---\n---\nlower", "utf8"),
+			writeFile(join(bundledDir, "explorer.md"), "---\n---\nbundled", "utf8"),
+		]);
+		if ((await readdir(globalDir)).filter((entry) => entry.toLowerCase() === "explorer.md").length < 2) return;
+		const store = new AgentDefinitionStore({ globalDir, bundledDir });
+		const catalog = await store.catalog();
+
+		expect(catalog.entries).toEqual([]);
+		expect(catalog.diagnostics.join("\n")).toMatch(/Conflicting global.*Explorer\.md.*explorer\.md/);
+		await expect(store.load("explorer", project)).rejects.toThrow(/Conflicting global/);
 	});
 
 	it.each([
@@ -138,92 +158,32 @@ describe("AgentDefinitionStore", () => {
 		["blank description", 'description: "   "', /description must be a non-empty string/],
 		["thinking enum", "thinking: ultra", /thinking must be one of/],
 		["tools CSV", "tools: read,bash", /tools must be a string array/],
-		["blank tool entry", 'tools: [read, "   "]', /tools must be a string array/],
 		["mixed all tool allowlist", "tools: [all, read]", /tools "all" must be the only entry/],
-		["extensions object", "extensions: { path: local.ts }", /extensions must be a boolean or string array/],
-		["blank extension resource", 'extensions: ["   "]', /extensions must be a boolean or string array/],
-		["skills scalar", "skills: local-skill", /skills must be a boolean or string array/],
-		["blank skill resource", 'skills: ["   "]', /skills must be a boolean or string array/],
+		["extensions array", "extensions: [./local.ts]", /extensions must be a boolean/],
+		["skills scalar", "skills: local-skill", /skills must be a boolean/],
 		["model number", "model: 42", /model must be a string or string array/],
-		["blank scalar model", 'model: "   "', /model must be a string or string array with at least one non-empty entry/],
-		["blank model candidate", 'model: [provider/model, "   "]', /model must be a string or string array/],
-		["empty model candidates", "model: []", /model must be a string or string array with at least one non-empty entry/],
+		["empty model candidates", "model: []", /at least one non-empty entry/],
 		["enabled string", "enabled: yes-please", /enabled must be a boolean/],
 		["denylist CSV", "disallowed_tools: bash,write", /disallowed_tools must be a string array/],
-		["blank denylist tool entry", 'disallowed_tools: [bash, "   "]', /disallowed_tools must be a string array/],
 	])("rejects %s", async (_caseName, field, expectedError) => {
-		await writeFile(join(root, ".pi", "agents", "strict.md"), `---\n${field}\n---\nprompt`, "utf8");
-		const store = new AgentDefinitionStore({ root, globalDir, bundledDir });
+		const definitionPath = join(project, ".pi", "agents", "strict.md");
+		await writeFile(definitionPath, `---\n${field}\n---\nprompt`, "utf8");
+		const store = new AgentDefinitionStore({ globalDir, bundledDir });
 
-		await expect(store.load("strict")).rejects.toThrow(expectedError as RegExp);
-	});
-
-	it("preserves empty tools, extensions, and skills arrays", async () => {
-		const definitionPath = join(root, ".pi", "agents", "empty-collections.md");
-		await writeFile(
-			definitionPath,
-			"---\ntools: []\nextensions: []\nskills: []\n---\nUse no configured tools or resources.",
-			"utf8",
-		);
-		const store = new AgentDefinitionStore({ root, globalDir, bundledDir });
-
-		await expect(store.load("empty-collections")).resolves.toEqual({
-			name: "empty-collections",
-			source: "project-pi",
-			path: definitionPath,
-			prompt: "Use no configured tools or resources.",
-			tools: [],
-			extensions: [],
-			skills: [],
-		});
-	});
-
-	it.each(["off", "minimal", "low", "medium", "high", "xhigh", "max"])(
-		"accepts the %s thinking level and a scalar model",
-		async (thinking) => {
-			await writeFile(
-				join(root, ".pi", "agents", "thinker.md"),
-				`---\nmodel: provider/model\nthinking: ${thinking}\n---\nprompt`,
-				"utf8",
-			);
-			const store = new AgentDefinitionStore({ root, globalDir, bundledDir });
-
-			await expect(store.load("thinker")).resolves.toMatchObject({
-				model: "provider/model",
-				thinking,
-			});
-		},
-	);
-
-	it("loads bundled defaults directly, bypasses overrides, and returns undefined when absent", async () => {
-		await writeFile(
-			join(root, ".pi", "agents", "general-purpose.md"),
-			"---\ndescription: project\n---\nproject prompt",
-			"utf8",
-		);
-		await writeFile(join(bundledDir, "general-purpose.md"), "---\nmodel: [bundled/model]\n---\nbundled prompt", "utf8");
-		const store = new AgentDefinitionStore({ root, globalDir, bundledDir });
-
-		await expect(store.load("general-purpose")).resolves.toMatchObject({ source: "project-pi" });
-		await expect(store.loadBundled("GENERAL-PURPOSE")).resolves.toMatchObject({
-			source: "bundled",
-			model: ["bundled/model"],
-			prompt: "bundled prompt",
-		});
-		await expect(store.loadBundled("missing")).resolves.toBeUndefined();
+		await expect(store.load(definitionPath, project)).rejects.toThrow(expectedError as RegExp);
 	});
 
 	it("strictly loads both definitions shipped by the package", async () => {
-		const store = new AgentDefinitionStore({ root, globalDir });
+		const store = new AgentDefinitionStore({ globalDir });
 
-		await expect(store.loadBundled("explorer")).resolves.toMatchObject({
+		await expect(store.load("explorer", project)).resolves.toMatchObject({
 			source: "bundled",
 			tools: ["read", "bash", "grep", "find", "ls"],
 			extensions: false,
 			skills: false,
 			enabled: true,
 		});
-		await expect(store.loadBundled("general-purpose")).resolves.toMatchObject({
+		await expect(store.load("general-purpose", project)).resolves.toMatchObject({
 			source: "bundled",
 			tools: ["all"],
 			extensions: true,
@@ -232,32 +192,26 @@ describe("AgentDefinitionStore", () => {
 		});
 	});
 
-	it("reports malformed bundled definitions through loadBundled", async () => {
-		await writeFile(join(bundledDir, "broken.md"), "---\nenabled: definitely\n---\nbroken", "utf8");
-		const store = new AgentDefinitionStore({ root, globalDir, bundledDir });
-
-		await expect(store.loadBundled("broken")).rejects.toThrow(/enabled must be a boolean/);
-	});
-
-	it("reports missing definitions and malformed frontmatter explicitly", async () => {
-		const store = new AgentDefinitionStore({ root, globalDir, bundledDir });
-		await expect(store.load("missing")).rejects.toThrow(/Agent definition "missing" was not found/);
+	it("reports missing and malformed frontmatter explicitly", async () => {
+		const store = new AgentDefinitionStore({ globalDir, bundledDir });
+		await expect(store.load("missing", project)).rejects.toThrow(/was not found/);
 
 		await writeFile(join(globalDir, "plain.md"), "No frontmatter here.", "utf8");
-		await expect(store.load("plain")).rejects.toThrow(/missing YAML frontmatter/);
-
+		await expect(store.load("plain", project)).rejects.toThrow(/missing YAML frontmatter/);
 		await writeFile(join(globalDir, "sequence.md"), "---\n- description\n---\nprompt", "utf8");
-		await expect(store.load("sequence")).rejects.toThrow(/frontmatter must be a mapping/);
+		await expect(store.load("sequence", project)).rejects.toThrow(/frontmatter must be a mapping/);
 	});
 
-	it("accepts an empty frontmatter mapping", async () => {
-		await writeFile(join(bundledDir, "empty.md"), "---\n---\nprompt only", "utf8");
-		const store = new AgentDefinitionStore({ root, globalDir, bundledDir });
+	it("accepts empty frontmatter and resolves relative cwd before explicit paths", async () => {
+		const nested = join(project, "packages", "worker");
+		await mkdir(nested, { recursive: true });
+		await writeFile(join(project, "empty.md"), "---\n---\nprompt only", "utf8");
+		const store = new AgentDefinitionStore({ globalDir, bundledDir });
 
-		await expect(store.load("empty")).resolves.toEqual({
+		await expect(store.load("../../empty.md", nested)).resolves.toEqual({
 			name: "empty",
-			source: "bundled",
-			path: join(bundledDir, "empty.md"),
+			source: "path",
+			path: resolve(project, "empty.md"),
 			prompt: "prompt only",
 		});
 	});

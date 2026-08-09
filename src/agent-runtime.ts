@@ -29,7 +29,6 @@ export class AgentRuntime {
 	resolveLaunchPlan(
 		agentName: string,
 		definition: ResolvedAgentDefinition,
-		bundledDefinition: ResolvedAgentDefinition | undefined,
 		overrides: AgentOverrides,
 		ctx: ExtensionContext,
 	): AgentLaunchPlan {
@@ -42,11 +41,7 @@ export class AgentRuntime {
 			? Array.isArray(definition.model)
 				? definition.model
 				: [definition.model]
-			: definition.source !== "bundled" && bundledDefinition?.model
-				? Array.isArray(bundledDefinition.model)
-					? bundledDefinition.model
-					: [bundledDefinition.model]
-				: undefined;
+			: undefined;
 		const available = ctx.modelRegistry.getAvailable().filter((model) => {
 			if (ctx.scopedModels.length === 0) return true;
 			return ctx.scopedModels.some(
@@ -123,15 +118,7 @@ export class AgentRuntime {
 			if (denied.length) args.push("--exclude-tools", denied.join(","));
 		}
 		if (definition.extensions === false) args.push("--no-extensions");
-		if (Array.isArray(definition.extensions)) {
-			args.push("--no-extensions");
-			for (const extension of definition.extensions) args.push("--extension", extension);
-		}
 		if (definition.skills === false) args.push("--no-skills");
-		if (Array.isArray(definition.skills)) {
-			args.push("--no-skills");
-			for (const skill of definition.skills) args.push("--skill", skill);
-		}
 
 		return {
 			args,

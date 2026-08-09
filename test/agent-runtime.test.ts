@@ -14,7 +14,7 @@ interface TestModel {
 function definition(overrides: Partial<ResolvedAgentDefinition> = {}): ResolvedAgentDefinition {
 	return {
 		name: "worker",
-		source: "project-pi",
+		source: "path",
 		path: "/project/.pi/agents/worker.md",
 		prompt: "Implement the request.",
 		...overrides,
@@ -43,7 +43,7 @@ function agent(overrides: Partial<AgentInfo> = {}): AgentInfo {
 }
 
 describe("AgentRuntime model selection", () => {
-	it("gives an explicit override priority over definition, bundled, and Primary models", () => {
+	it("gives an explicit override priority over definition and Primary models", () => {
 		const runtime = new AgentRuntime("/package/dist/index.js");
 		const primary = { provider: "primary", id: "primary-model" };
 		const ctx = context(
@@ -54,7 +54,6 @@ describe("AgentRuntime model selection", () => {
 		const plan = runtime.resolveLaunchPlan(
 			"researcher",
 			definition({ model: "definition-model" }),
-			definition({ source: "bundled", model: "bundled-model" }),
 			{ model: ["missing-model", "target.model"] },
 			ctx,
 		);
@@ -63,30 +62,17 @@ describe("AgentRuntime model selection", () => {
 		expect(plan.args).toContain("override/target-model");
 	});
 
-	it("uses definition then bundled defaults before the Primary model", () => {
+	it("uses the selected definition before the Primary model", () => {
 		const runtime = new AgentRuntime("/package/dist/index.js");
 		const primary = { provider: "primary", id: "primary-model" };
 		const definitionModel = { provider: "models", id: "definition-model" };
-		const bundledModel = { provider: "models", id: "bundled-model" };
-		const ctx = context([primary, bundledModel, definitionModel], primary);
+		const ctx = context([primary, definitionModel], primary);
 
-		const selectedDefinition = runtime.resolveLaunchPlan(
-			"first",
-			definition({ model: "definition-model" }),
-			definition({ source: "bundled", model: "bundled-model" }),
-			{},
-			ctx,
-		);
-		const selectedBundled = runtime.resolveLaunchPlan(
-			"second",
-			definition({ model: undefined }),
-			definition({ source: "bundled", model: "bundled-model" }),
-			{},
-			ctx,
-		);
+		const selectedDefinition = runtime.resolveLaunchPlan("first", definition({ model: "definition-model" }), {}, ctx);
+		const selectedPrimary = runtime.resolveLaunchPlan("second", definition({ model: undefined }), {}, ctx);
 
 		expect(selectedDefinition.model).toBe("models/definition-model");
-		expect(selectedBundled.model).toBe("models/bundled-model");
+		expect(selectedPrimary.model).toBe("primary/primary-model");
 	});
 
 	it("falls back from an unavailable definition model but rejects an unavailable explicit model", () => {
@@ -97,20 +83,13 @@ describe("AgentRuntime model selection", () => {
 		const fallback = runtime.resolveLaunchPlan(
 			"fallback",
 			definition({ model: ["not-authenticated", "also-missing"] }),
-			undefined,
 			{},
 			ctx,
 		);
 
 		expect(fallback.model).toBe("primary/primary-model");
 		expect(() =>
-			runtime.resolveLaunchPlan(
-				"strict",
-				definition({ model: "primary-model" }),
-				undefined,
-				{ model: "not-authenticated" },
-				ctx,
-			),
+			runtime.resolveLaunchPlan("strict", definition({ model: "primary-model" }), { model: "not-authenticated" }, ctx),
 		).toThrow(/did not match an authenticated, enabled model/);
 	});
 
@@ -120,10 +99,10 @@ describe("AgentRuntime model selection", () => {
 		const outOfScope = { provider: "models", id: "special-model" };
 		const ctx = context([outOfScope, primary], primary, [primary]);
 
-		const fallback = runtime.resolveLaunchPlan("fallback", definition({ model: "special-model" }), undefined, {}, ctx);
+		const fallback = runtime.resolveLaunchPlan("fallback", definition({ model: "special-model" }), {}, ctx);
 
 		expect(fallback.model).toBe("primary/primary-model");
-		expect(() => runtime.resolveLaunchPlan("strict", definition(), undefined, { model: "special-model" }, ctx)).toThrow(
+		expect(() => runtime.resolveLaunchPlan("strict", definition(), { model: "special-model" }, ctx)).toThrow(
 			/did not match an authenticated, enabled model/,
 		);
 	});
@@ -134,20 +113,8 @@ describe("AgentRuntime model selection", () => {
 		const second = { provider: "alpha", id: "gpt-5-4-mini" };
 		const ctx = context([first, second], first);
 
-		const registryChoice = runtime.resolveLaunchPlan(
-			"registry",
-			definition({ model: "gpt.5-4.mini" }),
-			undefined,
-			{},
-			ctx,
-		);
-		const providerChoice = runtime.resolveLaunchPlan(
-			"provider",
-			definition({ model: "ALPHA/gpt.5.4.mini" }),
-			undefined,
-			{},
-			ctx,
-		);
+		const registryChoice = runtime.resolveLaunchPlan("registry", definition({ model: "gpt.5-4.mini" }), {}, ctx);
+		const providerChoice = runtime.resolveLaunchPlan("provider", definition({ model: "ALPHA/gpt.5.4.mini" }), {}, ctx);
 
 		expect(registryChoice.model).toBe("zeta/gpt-5.4-mini");
 		expect(providerChoice.model).toBe("alpha/gpt-5-4-mini");
@@ -155,7 +122,7 @@ describe("AgentRuntime model selection", () => {
 });
 
 describe("AgentRuntime launch arguments and envelopes", () => {
-	it("builds Spawned arguments with protected control tools and explicit resources", () => {
+	it("builds Spawned arguments with protected control tools and native resource discovery", () => {
 		const runtime = new AgentRuntime("/package/dist/index.js");
 		const model = { provider: "models", id: "coder" };
 		const plan = runtime.resolveLaunchPlan(
@@ -166,10 +133,9 @@ describe("AgentRuntime launch arguments and envelopes", () => {
 				thinking: "low",
 				tools: ["Read", "SendMessage"],
 				disallowed_tools: ["sendmessage", "LISTAGENTS", "Bash", "Write"],
-				extensions: ["/project/extensions/domain.js"],
-				skills: ["/project/skills/review"],
+				extensions: true,
+				skills: true,
 			}),
-			undefined,
 			{ thinking: "high" },
 			context([model], model),
 		);
@@ -188,12 +154,13 @@ describe("AgentRuntime launch arguments and envelopes", () => {
 		]);
 		expect(plan.args).toContain("Read,SendMessage,ListAgents");
 		expect(plan.args).toContain("Bash,Write");
-		expect(plan.args).toContain("/project/extensions/domain.js");
-		expect(plan.args).toContain("/project/skills/review");
 		expect(plan.args).toContain("high");
 		expect(plan.args).not.toContain("sendmessage,LISTAGENTS,Bash,Write");
-		expect(plan.args.filter((argument) => argument === "--no-extensions")).toHaveLength(1);
-		expect(plan.args.filter((argument) => argument === "--no-skills")).toHaveLength(1);
+		expect(plan.args).not.toContain("--no-extensions");
+		expect(plan.args).not.toContain("--no-skills");
+		expect(plan.args).not.toContain("--skill");
+		expect(plan.args).not.toContain("--approve");
+		expect(plan.args).not.toContain("--no-approve");
 		const prompts = plan.args.flatMap((argument, index) =>
 			argument === "--append-system-prompt" ? [plan.args[index + 1]] : [],
 		);
@@ -208,7 +175,6 @@ describe("AgentRuntime launch arguments and envelopes", () => {
 		const plan = runtime.resolveLaunchPlan(
 			"path-role",
 			definition({ model: "coder", prompt: "/project/role-instructions.md" }),
-			undefined,
 			{},
 			context([model], model),
 		);
@@ -226,7 +192,6 @@ describe("AgentRuntime launch arguments and envelopes", () => {
 		const plan = runtime.resolveLaunchPlan(
 			"minimal",
 			definition({ model: "coder", tools: ["all"], extensions: false, skills: false }),
-			undefined,
 			{},
 			context([model], model),
 		);

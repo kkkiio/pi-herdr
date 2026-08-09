@@ -42,7 +42,12 @@ vi.mock("../src/herdr-client.js", () => {
 
 vi.mock("../src/agent-definitions.js", () => {
 	class AgentDefinitionStore {
-		constructor(readonly options: Record<string, unknown>) {
+		readonly catalog = vi.fn(async () => ({
+			entries: [{ name: "explorer", description: "Read-only search" }],
+			diagnostics: ["broken global definition"],
+		}));
+
+		constructor(readonly options?: Record<string, unknown>) {
 			indexState.definitions.push(this);
 		}
 	}
@@ -231,7 +236,12 @@ describe("pi-herdr extension role registration", () => {
 		const client = indexState.clients[0]!;
 		const supervisor = indexState.supervisors[0]!;
 		expect(client.socketPath).toBe("/tmp/herdr.sock");
-		expect(indexState.definitions[0]?.options).toEqual({ cwd: "/project" });
+		expect(indexState.definitions[0]?.options).toBeUndefined();
+		expect(indexState.definitions[0]?.catalog).toHaveBeenCalledOnce();
+		expect(testPi.tools.find((tool) => tool.name === "Agent")?.parameters.properties.definition.description).toContain(
+			"explorer — Read-only search",
+		);
+		expect(notify).toHaveBeenCalledWith("broken global definition", "error");
 		expect(supervisor.paneId).toBe("w1:p1");
 		expect(supervisor.configurationDiagnostic).toHaveBeenCalledWith("/project");
 		expect(supervisor.initialize).toHaveBeenCalledOnce();
@@ -256,7 +266,7 @@ describe("pi-herdr extension role registration", () => {
 		expect(testPi.tools).toHaveLength(4);
 		await testPi.emit("session_shutdown");
 		expect(supervisor.dispose).toHaveBeenCalledOnce();
-		expect(notify).not.toHaveBeenCalled();
+		expect(notify).toHaveBeenCalledTimes(1);
 	});
 
 	it("registers exactly two Spawned tools and routes name events until shutdown", async () => {

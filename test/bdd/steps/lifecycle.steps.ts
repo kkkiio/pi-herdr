@@ -108,7 +108,7 @@ async function installLifecycle(thisWorld: PiHerdrWorld, mode: LifecycleMode): P
 	const sandbox = await thisWorld.prepareSandbox();
 	const supervisor = new AgentSupervisor(
 		client,
-		new AgentDefinitionStore({ root: sandbox, globalDir: `${sandbox}/global` }),
+		new AgentDefinitionStore({ globalDir: `${sandbox}/global` }),
 		new AgentRuntime("/package/dist/index.js"),
 		primaryAgent.pane_id,
 		{ PI_CODING_AGENT_DIR: `${sandbox}/pi-home` },
@@ -149,7 +149,7 @@ When("the Primary begins launching the shared Agent", async function (this: PiHe
 			{
 				description: "Implement the feature",
 				prompt: "Build it & report <tests>.",
-				agent_type: "general-purpose",
+				definition: "general-purpose",
 				name: "worker",
 			},
 			context,
@@ -210,7 +210,7 @@ When("the Primary launches the worktree Agent", async function (this: PiHerdrWor
 			{
 				description: "Isolated implementation",
 				prompt: "Implement in an isolated checkout.",
-				agent_type: "general-purpose",
+				definition: "general-purpose",
 				name: "worker",
 				isolation: "worktree",
 			},
@@ -243,7 +243,7 @@ When("the Primary attempts to launch the worktree Agent", async function (this: 
 			{
 				description: "Risky isolated implementation",
 				prompt: "This prompt will be rejected.",
-				agent_type: "general-purpose",
+				definition: "general-purpose",
 				name: "worker",
 				isolation: "worktree",
 			},

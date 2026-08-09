@@ -19,7 +19,7 @@ async function installSupervisor(
 	const client = thisWorld.createClient();
 	const supervisor = new AgentSupervisor(
 		client,
-		new AgentDefinitionStore({ root: sandbox, globalDir: `${sandbox}/global` }),
+		new AgentDefinitionStore({ globalDir: `${sandbox}/global` }),
 		new AgentRuntime("/package/dist/index.js"),
 		primaryAgent.pane_id,
 		{ PI_CODING_AGENT_DIR: `${sandbox}/pi-home` },
@@ -98,7 +98,7 @@ Given("a Primary that has launched one Agent beside a live peer", async function
 		{
 			description: "Background implementation",
 			prompt: "Implement and report.",
-			agent_type: "general-purpose",
+			definition: "general-purpose",
 			name: "worker",
 		},
 		this.state.get("context") as ExtensionContext,
