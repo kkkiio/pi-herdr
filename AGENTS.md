@@ -2,7 +2,7 @@
 
 ## Project Structure Guide
 
-pi-herdr 当前处于架构与文档阶段。实现代码尚未开始；`docs/` 中的 Proposed ADR 是实现依据，`agents/` 中的 Markdown 是将随 npm 包发布的运行时资源。
+pi-herdr 是 TypeScript ESM Pi extension。`src/` 实现 Herdr 0.7.5 / protocol 17 的 socket 控制面，`test/` 区分快速测试与完整 BDD 回归，`docs/adr/` 中的 Accepted ADR 是实现与维护依据；`agents/` 中的 Markdown 是随 npm 包发布的运行时资源。
 
 ### Repo Structure & Important Files
 
@@ -15,21 +15,39 @@ pi-herdr 当前处于架构与文档阶段。实现代码尚未开始；`docs/` 
 │   └── general-purpose.md                 # 具备完整工作工具的通用 Agent
 ├── assets/
 │   └── pi-herdr-logo.png                  # README 品牌图
+├── .github/
+│   └── workflows/ci.yml                   # main push/PR 全量回归 CI
 ├── docs/
-│   ├── agents.md                          # Agent API、name、tab 与生命周期
+│   ├── spawned-agent-contract.md          # 创建、双模式、name、持久性与停止语义
 │   ├── messaging.md                       # ListAgents、SendMessage 与 reply
 │   ├── agent-definitions.md               # Markdown frontmatter 用户参考
-│   ├── architecture.md                    # 当前整体架构
+│   ├── herdr-rpc.md                       # Socket protocol、事件、重试与 RPC 边界
 │   └── adr/
 │       ├── 001-persistent-background-agents.md
 │       ├── 002-default-model-selection.md
 │       ├── 003-agent-definitions.md
 │       └── 004-herdr-socket-integration.md
-├── src/                                   # TypeScript 实现目录；尚未开始
-└── test/                                  # 自动化测试目录；尚未开始
+├── scripts/
+│   └── verify-package.mjs                 # npm dry-run 打包清单与编译入口 smoke 校验
+├── src/
+│   ├── index.ts                           # 单 extension 入口与 Primary/Spawned 装配
+│   ├── agent-definitions.ts               # Definition catalog、显式路径与严格 YAML 解析
+│   ├── agent-runtime.ts                   # Pi 启动参数、模型、prompt 与 rename
+│   ├── agent-supervisor.ts                # Live ownership、创建事务与工具语义
+│   ├── herdr-client.ts                    # 独立 RPC socket、event stream 与只读重试
+│   ├── herdr-types.ts                     # Herdr protocol 17 wire types
+│   ├── tools.ts                           # 四个 Pi tool 的 schema 与注册
+│   └── ui.ts                              # `/agents` live runtime UI
+├── test/
+│   ├── bdd/                               # Cucumber 全量回归 features/steps/support
+│   └── *.test.ts                          # Vitest 快速单元与协议测试
+├── cucumber.mjs                           # BDD profile 与 TypeScript support 配置
+├── vitest.config.ts                       # 快速测试配置
+├── tsconfig.json                          # NodeNext build/typecheck 配置
+└── package.json                           # npm/Pi manifest 与 canonical scripts
 ```
 
-实现时保持 `src/` 为少量深模块；按 `docs/architecture.md` 的模块边界组织，不要为单个小动作创建 helper 文件或浅包装层。
+实现时保持 `src/` 为少量深模块；Herdr transport 遵守 `docs/herdr-rpc.md`，Spawned lifecycle 遵守 `docs/spawned-agent-contract.md`，不要为单个小动作创建 helper 文件或浅包装层。
 
 ## Domain Language
 
@@ -54,11 +72,15 @@ When changing Agent lifecycle, spawning, or herdr integration:
 
 - Keep every spawned Agent background-only and session-persistent.
 - Create one herdr tab per Agent; run pi in that tab's managed pane. Reuse the tab/root pane returned by `worktree.create`.
+- After `worktree.create`, call `tab.rename`; do not pass role state through worktree env because protocol 17 has no such parameter.
+- Pass Spawned role through Pi's `--pi-herdr-role spawned` flag in `agent.start.args`.
 - Share the creator's workspace and inherit its cwd by default. An explicit `cwd` selects the Spawned Agent working directory without changing definition resolution; create a worktree only for explicit `isolation: "worktree"`, passing the resolved cwd to herdr.
 - Keep herdr `AgentInfo` and `agent_status` unchanged in tool results; UI may visually group `done` with idle.
 - Treat pane/tab/process disappearance as the end of pi-herdr management. Preserve session/worktree, but do not add offline registry, mailbox or automatic recovery.
 - Do not add active/running concurrency limits. Enforce only the current Primary process's `piHerdr.maxMembers` safety limit.
-- Return `Agent` success only after `agent.start` and the initial `agent.prompt` succeed; roll back resources created by a failed launch.
+- Treat raw `agent.start` as launch-pending; poll only `agent.get` until `launch_pending` is false and `interactive_ready` is true before the initial prompt.
+- Return `Agent` success only after the initial `agent.prompt` succeeds.
+- On failed worktree launch, try `worktree.remove({ force: false })` before `pane.close`; delete a returned session only after its runtime is confirmed closed and it is a `herdr:pi` path inside the configured Pi session tree, and include every cleanup failure or residual path in the final error.
 
 When changing discovery or messaging:
 
@@ -68,6 +90,15 @@ When changing discovery or messaging:
 - Load the same pi-herdr extension in Primary and Spawned runtime roles. Spawned mode registers `ListAgents` and `SendMessage`, but not `Agent` or `StopAgent`.
 - Keep `StopAgent` limited to `pane.close`, accept live name or pane ID, reject self-stop, and never delete session/worktree.
 - Retry idempotent reads only; never automatically replay mutating herdr RPC.
+
+When changing Herdr transport or event handling:
+
+- Target Herdr 0.7.5 / socket protocol 17; diagnose both `ping` and `session.snapshot` before accepting the connection.
+- Require a successful `ping` plus initial `session.snapshot` bootstrap before every control operation; transient bootstrap failures may retry, but must not leave a partially initialized control plane usable.
+- Use one independent socket per ordinary RPC and a separate long-lived socket for `events.subscribe`.
+- Send dotted subscription types, and parse actual push names: underscore lifecycle events plus dotted `pane.agent_status_changed`.
+- Before the first event acknowledgement, reconnect a bounded number of times; after an acknowledged subscription disconnects, keep reconnecting with capped backoff and reconcile ownership from a fresh `session.snapshot` without recreating missing runtimes.
+- Reconciliation may update or delete only ownership records that existed when its `session.snapshot` or `agent.list` read began; never let a stale response erase a concurrently completed launch.
 
 When changing Agent naming:
 
@@ -88,23 +119,23 @@ List effective enabled definitions from the global directory and then bundled de
 
 Use `definition: string` as the selector. Resolve a bare name from global then bundled definitions; resolve an absolute or explicit relative `.md` path exactly, with relative paths based on the Primary call cwd. Do not automatically select project definitions from the Primary Git root or scan external repositories.
 
-Tell Primary Agents to inspect task-relevant `.pi/agents`, `.agents/agents`, and project `AGENTS.md` with ordinary file/Git tools before using the fallback catalog. A definition path selects role configuration only and never implies Agent workspace or cwd. Resolve relative `definition` paths and relative `cwd` values independently from the Primary call cwd.
+Recommend that Primary Agents inspect task-relevant `.pi/agents` and `.agents/agents` directories with ordinary file/Git tools before using the fallback catalog. A definition path selects role configuration only and never implies Agent workspace or cwd. Resolve relative `definition` paths and relative `cwd` values independently from the Primary call cwd.
 
 Treat an explicit definition path as `Agent` input rather than a pi auto-discovered project resource. Do not inject project trust policy into Primary prompts or tool guidelines. Do not read, write, cache or override pi trust state, and do not pass `--approve` or `--no-approve`; every Spawned pi resolves native project trust for its actual cwd.
 
-When adding npm packaging, include both `dist/` and `agents/` in `package.json#files`, resolve bundled files from `import.meta.url`, and verify the tarball contains both Markdown definitions.
+When changing npm packaging, keep both `dist/` and `agents/` in `package.json#files`, resolve bundled files from `import.meta.url`, and keep `npm run verify:package` checking both Markdown definitions and compiled entry files.
 
 ### Compatibility Policy
 
-When changing a Proposed design before implementation, make the direct migration and update every affected document. Do not add compatibility branches, deprecated aliases, or checks for behaviors that have never shipped.
+When changing an Accepted design before the first npm release, make the direct migration and update every affected document. Do not add compatibility branches, deprecated aliases, or checks for behaviors that have never shipped.
 
 ### Documentation Intent Principle
 
-When implementation disagrees with a Proposed ADR because a platform API behaves differently, update the ADR and user documentation in the same change. Keep detailed lifecycle and error semantics in `docs/`; keep README focused on getting started plus the user-facing herdr RPC support matrix.
+When implementation disagrees with an Accepted ADR because a platform API behaves differently, update the ADR and user documentation in the same change. Keep detailed lifecycle and error semantics in `docs/`; keep README focused on getting started plus the user-facing Herdr RPC support matrix.
 
 ### Code Design
 
-When adding TypeScript implementation, follow *A Philosophy of Software Design*: prefer deep modules with small public surfaces, keep substantial functions at least 20 lines when the logic belongs together, and prefer established library helpers over custom helper proliferation.
+When adding TypeScript implementation, follow _A Philosophy of Software Design_: prefer deep modules with small public surfaces, keep substantial functions at least 20 lines when the logic belongs together, and prefer established library helpers over custom helper proliferation.
 
 When a formatter changes files in scope, keep its output. Do not manually roll back formatter-owned changes.
 
@@ -112,9 +143,34 @@ Do not run `git diff --check` in this repository.
 
 ## Operation Guide
 
-### Current Development State
+### Setup and Canonical Commands
 
-There is no `package.json`, build script, runtime implementation, or automated test suite yet. Do not claim the package can build or publish until those files exist.
+After cloning or when `package-lock.json` changes, install exactly the locked dependency graph:
+
+```bash
+npm ci
+```
+
+When changing TypeScript, tests, definitions, scripts, or configuration, run the fast local checks during iteration:
+
+```bash
+npm run format:check
+npm run typecheck
+npm run build
+npm run test:fast
+```
+
+Before pushing implementation changes or opening/updating a PR, run the same full regression used by CI:
+
+```bash
+npm run test:regression
+```
+
+When changing package metadata, build output, bundled definitions, or publishing behavior, verify the npm tarball explicitly:
+
+```bash
+npm run verify:package
+```
 
 ### Documentation Verification
 
@@ -129,5 +185,3 @@ When changing Markdown links, validate local targets:
 ```bash
 ruby -e 'Dir["{README.md,docs/**/*.md}"].each { |file| File.read(file).scan(/\[[^\]]+\]\(([^)]+)\)/).flatten.each { |target| next if target =~ %r{^(https?://|#)}; path = File.expand_path(target.split("#", 2).first, File.dirname(file)); abort("broken link: #{file} -> #{target}") unless File.exist?(path) } }; puts "local markdown links ok"'
 ```
-
-When `package.json` and the build exist, replace this placeholder with the canonical install, typecheck, test, format, and package-verification commands in the same change.

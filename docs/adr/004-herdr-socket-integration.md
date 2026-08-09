@@ -1,27 +1,33 @@
 # ADR-004: Herdr Socket Integration
 
-- 状态：提议（Proposed）
+- 状态：已接受（Accepted）
 - 日期：2026-08-09
 
 ## Context
 
-pi-herdr 需要创建 Agent tab/pane、启动交互式 pi、投递 live prompt、发现 peer、同步 name、观察状态和实现 StopAgent。所有操作都发生在当前 herdr live session，不需要在 runtime 消失后重建逻辑 Agent。
+pi-herdr 需要创建 Agent tab/pane、启动交互式 Pi、投递 live prompt、发现 peer、同步 name、观察状态和实现 StopAgent。所有操作都发生在当前 Herdr live session，不需要在 runtime 消失后重建逻辑 Agent。当前平台基线是 Herdr 0.7.5 / socket protocol 17。
 
 ## Decision
 
 ### 1. Raw socket is the control plane
 
-扩展从 `HERDR_SOCKET_PATH` 连接当前 herdr server，使用 newline-delimited JSON、唯一 request ID 和 schema 对齐的类型。CLI 只用于人工诊断，不是实现控制面。
+扩展从 `HERDR_SOCKET_PATH` 连接当前 Herdr server，使用 newline-delimited JSON、唯一 request ID 和 schema 对齐的类型。普通 RPC 每次建立独立 socket，写入一个请求并读取同 ID 的一个响应后关闭；请求和首次 subscription acknowledgement 的 5 秒限制是绝对 deadline，不会被零散 I/O 延长。不建立承载所有 mutation 的共享 request socket。CLI 只用于人工诊断，不是实现控制面。
 
-`HERDR_ENV != 1` 时 extension 静默不注册控制面。已经处于 herdr 环境但 socket 缺失或协议不兼容时显示明确诊断，不猜测默认路径。
+`events.subscribe` 独占另一条长连接：读取 `subscription_started` 后持续消费 push，断线时重新建立并订阅。普通 RPC 与 event stream 不复用连接。
+
+`HERDR_ENV != 1` 时 extension 静默不注册控制面。已经处于 Herdr 环境但 socket 缺失时显示明确诊断，不猜测默认路径。初始化先用 `ping` 读取 server version/protocol，再用 `session.snapshot` 检查 protocol 并取得 reconciliation 基线；所有控制操作都要求完整 bootstrap 成功，暂时性 snapshot 失败由后续操作或 event acknowledgement 重试，不能留下可用的半初始化状态。protocol 不是 17 时显示实际 version/protocol 并拒绝继续。Herdr 0.7.5 是该 protocol contract 的支持基线。
 
 ### 2. Creation uses returned root panes
 
-共享 workspace 时把 `Agent({ cwd })` 解析出的工作目录传给 `tab.create`，直接在返回的 root pane 中执行 `agent.start`；未提供 cwd 时继承 Primary 调用时的 cwd。Worktree 隔离时把同一 cwd 传给 `worktree.create`，直接复用其返回的 workspace、tab 和 root pane，不再额外调用 `tab.create`。Definition 文件位置不参与 cwd 或 worktree 选择。
+共享 workspace 时把 `Agent({ cwd })` 解析出的工作目录传给 `tab.create`，直接在返回的 root pane 中执行 `agent.start`；未提供 cwd 时继承 Primary 调用时的 cwd。Worktree 隔离时把同一 cwd 传给 `worktree.create`，直接复用其返回的 workspace、tab 和 root pane，不再额外调用 `tab.create`，随后显式调用 `tab.rename` 把返回 tab 的 label 同步为 Agent name。Definition 文件位置不参与 cwd 或 worktree 选择。
 
-`agent.start` 启动全新正常落盘的 pi session，显式加载同一个 pi-herdr extension 的 Spawned role，并传入创建时固定的 definition 配置。pi-herdr 不传 `--approve` 或 `--no-approve`；Spawned pi 针对实际 cwd 正常执行原生 project trust。name 同时用于 pi session、herdr Agent route 和 tab label。
+`worktree.create` 没有 env 参数。`agent.start` 通过 `args` 启动全新、正常落盘的 Pi session，显式加载同一个 pi-herdr extension，并用 Pi flag `--pi-herdr-role spawned` 选择 Spawned role；definition 的模型、thinking、工具和资源也映射到 Pi args。pi-herdr 不传 `--approve` 或 `--no-approve`；Spawned Pi 针对实际 cwd 正常执行原生 project trust。name 同时用于 Pi session、Herdr Agent route 和 tab label。
 
-只有初始 `agent.prompt` 成功后 `Agent` 才返回 `launched`。此前失败按逆序使用 `pane.close` / `tab.close`、session cleanup 和 `worktree.remove({ force: false })` 回滚；herdr 拒绝移除时保留现场并报告残留。
+raw `agent.start` 返回成功时 Agent 可能仍有 `launch_pending: true`。运行时使用可重试的只读 `agent.get` 轮询，直到 `launch_pending: false` 且 `interactive_ready: true`，之后才提交初始 `agent.prompt`。只有 prompt 成功后 `Agent` 才返回 `launched`。
+
+Worktree 流程失败时先调用 `worktree.remove({ force: false })`；安全移除失败后再 `pane.close`。共享流程关闭本次新建的 tab。只有 runtime 已确认关闭，且 launch 已暴露本次 `herdr:pi` session、绝对 `.jsonl` path 位于 Pi 实际 session directory 内时，清理才删除这个精确文件；目录解析优先级是 `PI_CODING_AGENT_SESSION_DIR`、项目覆盖后的 `settings.json#sessionDir`、agent directory `sessions/`。close 结果不确定时保留 session，不扫描目录或按 name 猜测。所有验证失败、清理错误和未移除的 workspace、pane、session path 都合并进最终错误。
+
+若 `tab.create` / `worktree.create` 已发送但响应在返回 ID 前丢失，客户端不重放 mutation；实现也不通过 label 或并发 snapshot 猜测资源归属，而是在最终错误中明确报告 unknown delivery 与可能存在的 untracked container。
 
 ### 3. Prompt is the only message ingress
 
@@ -50,43 +56,46 @@ herdr 的原子 uniqueness check 处理验证后的竞争。任一步失败时�
 
 ### 6. Events maintain live memory only
 
-Supervisor 使用 herdr schema 的实际事件名订阅 `pane_agent_detected`、`pane_agent_status_changed`、`pane_closed`、`pane_exited`、`tab_closed` 和 `tab_renamed`。
+Supervisor 的 subscription request 使用 protocol 17 点号类型：`pane.agent_detected`、`pane.closed`、`pane.exited`、`tab.closed`、`tab.renamed`，并为每个受管 pane 添加 `pane.agent_status_changed`。
+
+Push envelope 使用 Herdr 的实际 wire schema，而不是把 request type 原样回显：普通 lifecycle push 是 `pane_agent_detected`、`pane_closed`、`pane_exited`、`tab_closed`、`tab_renamed`；过滤后的状态 push 是点号 `pane.agent_status_changed`。客户端分别建模并处理这两组名称。
 
 事件更新当前 Primary 的内存记录、容量和 UI。`done` 与 `unknown` 保留在工具返回中；只有 UI 可以把 `done` 视觉归类为 idle。关闭事件删除本地 ownership，不创建 unavailable 状态。
 
 ### 7. Retry only idempotent reads
 
-Socket 断开后进行有界重连、重新订阅并获取 `session.snapshot` / `agent.list`。Reconciliation 只删除不再 live 的本地记录并刷新现有引用，不恢复 runtime 或 ownership。
+首次 event subscription 尚未收到 acknowledgement 时只进行有限次连接尝试；曾成功建立的 event socket 断开后以封顶退避持续重连、重新订阅并获取 `session.snapshot`。正常 discovery 继续通过 `agent.list` 核对 live 集合。Reconciliation 只删除不再 live 的本地记录并刷新现有引用，不恢复 runtime 或 ownership。普通 request socket 的一次失败不会重放 mutation。
 
-`agent.list`、`agent.get`、snapshot 等幂等读取可以重试。`agent.start`、`agent.prompt`、rename、close、tab/worktree mutation 不自动重放，避免响应丢失后产生重复副作用。
+`ping`、`session.snapshot`、`agent.list`、`agent.get` 等幂等读取可以重试。启动就绪轮询也只调用 `agent.get`。`agent.start`、`agent.prompt`、rename、close、tab/worktree mutation 不自动重放，避免响应丢失后产生重复副作用。
 
 ### 8. RPC boundary
 
-| pi-herdr behavior | Herdr RPC |
-| --- | --- |
-| Live discovery and target resolution | `agent.list`, `agent.get` |
-| Shared Agent container | `tab.create` |
-| Worktree Agent container | `worktree.create` |
-| Start pi | `agent.start` |
-| Initial and later messages | `agent.prompt` |
-| `/name` synchronization | `agent.rename`, `tab.rename` |
-| Stop runtime | `pane.close` |
-| Failure rollback | `pane.close`, `tab.close`, `worktree.remove` |
-| Caller/runtime lookup | `pane.current`, `pane.get` |
-| State and reconnect | `events.subscribe`, `session.snapshot` |
+| pi-herdr behavior                    | Herdr RPC                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------ |
+| Protocol diagnostics and bootstrap   | `ping`, `session.snapshot`                                                           |
+| Live discovery and target resolution | `agent.list`, `agent.get`                                                            |
+| Shared Agent container               | `tab.create`                                                                         |
+| Worktree Agent container             | `worktree.create`, `tab.rename`                                                      |
+| Start Pi and wait until interactive  | `agent.start`, read-only `agent.get` polling                                         |
+| Initial and later messages           | `agent.prompt`                                                                       |
+| `/name` synchronization              | `agent.get`, `tab.get`, `agent.rename`, `tab.rename`                                 |
+| Stop runtime                         | `pane.close`                                                                         |
+| Failure rollback                     | `worktree.remove`, then `pane.close` when removal fails; `tab.close` for shared mode |
+| Caller lookup                        | `pane.current`                                                                       |
+| State and reconnect                  | `events.subscribe`, `session.snapshot`                                               |
 
 pi-herdr 不暴露通用 workspace/tab/pane/layout、terminal input、agent wait/read/focus、worktree cleanup、plugin/server/integration 或 notification 管理工具。
 
 ## Alternatives
 
-| Alternative | Why not chosen |
-| --- | --- |
-| CLI wrappers | 需要频繁 fork 和文本解析，不适合事件驱动扩展 |
-| Durable mailbox + wake token | 当前产品只承诺 live messaging，不需要消息持久化协议 |
-| Cross-process custom `pi.sendMessage` | 该 API 属于目标进程本地 extension，herdr prompt 无法直接调用它 |
-| Mutating RPC auto-retry | 响应丢失时会重复创建、发送或关闭 |
-| Worktree 后再创建 tab | `worktree.create` 已返回 tab/root pane，会破坏一个 Agent 一个 tab |
-| StopAgent 关闭整个 tab | 可能误关用户后来加入的其他 pane |
+| Alternative                           | Why not chosen                                                                                           |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| CLI wrappers                          | 需要频繁 fork 和文本解析，不适合事件驱动扩展                                                             |
+| Durable mailbox + wake token          | 当前产品只承诺 live messaging，不需要消息持久化协议                                                      |
+| Cross-process custom `pi.sendMessage` | 该 API 属于目标进程本地 extension，herdr prompt 无法直接调用它                                           |
+| Mutating RPC auto-retry               | 响应丢失时会重复创建、发送或关闭                                                                         |
+| Worktree 后再创建 tab                 | `worktree.create` 已返回 tab/root pane；只需 `tab.rename` 同步 label，额外 tab 会破坏一个 Agent 一个 tab |
+| StopAgent 关闭整个 tab                | 可能误关用户后来加入的其他 pane                                                                          |
 
 ## Consequences
 

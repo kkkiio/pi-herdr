@@ -41,6 +41,8 @@ SendMessage({
 
 SendMessage 不提供 `steer` / `followUp` 参数。消息在目标 pi 中的实际输入时序遵循当前 herdr/pi 的原生 `agent.prompt` 行为，pi-herdr 不使用 send-keys 或终端输入路径模拟额外 delivery mode。
 
+每次目标解析与 prompt 都使用普通 request/response RPC 的独立 socket；`events.subscribe` 的专用长连接只维护 live 状态，不承载消息，也不作为 prompt ack。
+
 ## Envelope and Reply
 
 初始 Agent prompt 和每次 SendMessage 都使用同一个没有 closing tag 的文本 envelope：
@@ -61,9 +63,9 @@ Agent 完成工作后按 system prompt 使用 `SendMessage` 回复：
 
 ```typescript
 SendMessage({
-  agent: "w1:p1",
-  message: "认证入口位于 src/auth/index.ts；刷新令牌逻辑在 src/auth/refresh.ts。",
-})
+	agent: "w1:p1",
+	message: "认证入口位于 src/auth/index.ts；刷新令牌逻辑在 src/auth/refresh.ts。",
+});
 ```
 
 结果没有独立 store、消费协议或完成通知抑制。一次回复是否成功只取决于 reply target 当时是否 live。
@@ -73,7 +75,7 @@ SendMessage({
 - 不实现 durable mailbox、message ID、ack、去重或 offline queue。
 - 不读取目标 session 最后一条 assistant 消息来推断结果。
 - 不自动恢复已经关闭的 Agent。
-- socket 断线时只自动重试 `agent.list`、`agent.get` 等幂等读取。
+- socket 断线时只自动重试 `ping`、`session.snapshot`、`agent.list`、`agent.get` 等幂等读取。
 - `agent.prompt`、`agent.start`、rename、close 等 mutating RPC 不自动重放，避免重复提交或重复操作。
 
 消息不会提升接收方权限，也不能代替用户批准。Spawned 模式始终拥有 `ListAgents` 和 `SendMessage`，但不拥有 `Agent` 或 `StopAgent`。
