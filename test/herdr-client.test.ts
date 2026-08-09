@@ -139,10 +139,8 @@ describe.skipIf(process.platform === "win32")("HerdrClient Unix socket transport
 
 	it("rejects multiple ordinary response lines as a protocol error", async () => {
 		const api = await startApi((request, _connection, socket) => {
-			socket.write(`${JSON.stringify({ id: request.id, result: { type: "pong" } })}\n`);
-			setImmediate(() => {
-				socket.end(`${JSON.stringify({ id: request.id, result: { type: "pong" } })}\n`);
-			});
+			const response = `${JSON.stringify({ id: request.id, result: { type: "pong" } })}\n`;
+			socket.end(`${response}${response}`);
 		});
 		const client = new HerdrClient(socketPath);
 
@@ -151,6 +149,25 @@ describe.skipIf(process.platform === "win32")("HerdrClient Unix socket transport
 			kind: "protocol",
 		});
 		expect(api.connections).toBe(1);
+	});
+
+	it("finishes an ordinary RPC after its response without waiting for server EOF", async () => {
+		let clientClosed!: () => void;
+		const clientClose = new Promise<void>((resolve) => {
+			clientClosed = resolve;
+		});
+		await startApi((request, _connection, socket) => {
+			socket.once("close", clientClosed);
+			socket.write(`${JSON.stringify({ id: request.id, result: { type: "pong", version: "0.7.5", protocol: 17 } })}\n`);
+		});
+		const client = new HerdrClient(socketPath, { requestTimeoutMs: 30 });
+
+		await expect(client.requestRead("ping", {})).resolves.toEqual({
+			type: "pong",
+			version: "0.7.5",
+			protocol: 17,
+		});
+		await clientClose;
 	});
 
 	it("retries a read transport failure once with a fresh connection", async () => {

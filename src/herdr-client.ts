@@ -262,8 +262,6 @@ export class HerdrClient {
 			let connected = false;
 			let requestWritten = false;
 			let responseBuffer = "";
-			let responseReceived = false;
-			let responseValue: T | undefined;
 			let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
 			const finish = (error: HerdrRpcError | undefined, value?: T) => {
 				if (settled) return;
@@ -336,20 +334,6 @@ export class HerdrClient {
 				);
 			});
 			socket.on("data", (chunk: string | Buffer) => {
-				if (responseReceived) {
-					responseBuffer += chunk.toString();
-					if (!responseBuffer.trim()) return;
-					finish(
-						new HerdrRpcError(`Herdr ${method} returned more than one response line.`, {
-							code: "multiple_responses",
-							kind: "protocol",
-							method,
-							requestId,
-							delivery: "unknown",
-						}),
-					);
-					return;
-				}
 				responseBuffer += chunk.toString();
 				const newline = responseBuffer.indexOf("\n");
 				if (newline < 0) {
@@ -461,14 +445,9 @@ export class HerdrClient {
 					);
 					return;
 				}
-				responseReceived = true;
-				responseValue = result as T;
+				finish(undefined, result as T);
 			});
 			const closed = () => {
-				if (responseReceived) {
-					finish(undefined, responseValue);
-					return;
-				}
 				finish(
 					new HerdrRpcError(`Herdr closed the ${method} connection before a complete response.`, {
 						code: "connection_closed",
