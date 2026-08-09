@@ -114,8 +114,16 @@ export class AgentSupervisor {
 
 		const requestedCwd = resolve(ctx.cwd, request.cwd ?? ctx.cwd);
 		const ownedBeforeRead = new Set(this.owned.keys());
-		const [configuration, callerResult, agentsResult, definition] = await Promise.all([
-			this.readConfiguration(ctx.cwd),
+		const primaryConfiguration = this.readConfiguration(ctx.cwd);
+		const sharedLaunchConfiguration =
+			request.isolation !== "worktree" && !this.environment.PI_CODING_AGENT_SESSION_DIR
+				? requestedCwd === resolve(ctx.cwd)
+					? primaryConfiguration
+					: this.readConfiguration(requestedCwd)
+				: Promise.resolve(undefined);
+		const [configuration, launchConfiguration, callerResult, agentsResult, definition] = await Promise.all([
+			primaryConfiguration,
+			sharedLaunchConfiguration,
 			this.client.requestRead("agent.get", { target: this.callerPaneId }, ctx.signal),
 			this.client.requestRead("agent.list", {}, ctx.signal),
 			this.definitions.load(request.definition, ctx.cwd),
@@ -147,7 +155,8 @@ export class AgentSupervisor {
 		let createdPaneId: string | undefined;
 		let createdWorktreeWorkspaceId: string | undefined;
 		let launchCwd = requestedCwd;
-		let launchSessionDirectory = configuration.sessionDirectory;
+		let launchSessionDirectory =
+			launchConfiguration === undefined ? configuration.sessionDirectory : launchConfiguration.sessionDirectory;
 		let startedAgent: AgentInfo | undefined;
 		try {
 			const plan = this.runtime.resolveLaunchPlan(request.name, definition, request, ctx);

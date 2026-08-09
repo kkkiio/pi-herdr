@@ -420,6 +420,42 @@ describe("AgentSupervisor launch transactions", () => {
 		expect(harness.updateTrackedPanes).toHaveBeenCalledWith([]);
 	});
 
+	it("uses the Spawned cwd sessionDir when cleaning up a failed shared launch", async () => {
+		filesystem.readFile.mockImplementation(async (path) => {
+			if (String(path) === "/workspace/.pi/settings.json") {
+				return JSON.stringify({ sessionDir: "/primary/session-store" });
+			}
+			if (String(path) === "/target/.pi/settings.json") {
+				return JSON.stringify({ sessionDir: "/target/session-store" });
+			}
+			throw Object.assign(new Error("missing"), { code: "ENOENT" });
+		});
+		const harness = createSupervisor();
+		harness.state.spawned = agent({
+			terminal_id: "term-worker",
+			tab_id: "w1:t2",
+			pane_id: "w1:p2",
+			name: "worker",
+			agent_session: {
+				source: "herdr:pi",
+				agent: "pi",
+				kind: "path",
+				value: "/target/session-store/fresh-worker.jsonl",
+			},
+		});
+		harness.state.mutationOverrides["agent.prompt"] = () => {
+			throw new Error("prompt rejected");
+		};
+
+		await expect(harness.supervisor.launch({ ...request, cwd: "../target" }, launchContext())).rejects.toThrow(
+			/Failed to launch Agent worker: prompt rejected/,
+		);
+
+		expect(filesystem.readFile).toHaveBeenCalledWith("/target/.pi/settings.json", "utf8");
+		expect(filesystem.unlink).toHaveBeenCalledOnce();
+		expect(filesystem.unlink).toHaveBeenCalledWith("/target/session-store/fresh-worker.jsonl");
+	});
+
 	it("preserves the Pi session when its Agent pane cannot be confirmed closed", async () => {
 		const harness = createSupervisor();
 		harness.state.spawned = agent({
