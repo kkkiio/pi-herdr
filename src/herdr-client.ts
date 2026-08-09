@@ -676,26 +676,34 @@ export class HerdrClient {
 					acknowledgementTimer = undefined;
 					const reconnected = this.eventEverAcknowledged;
 					this.eventEverAcknowledged = true;
-					this.eventReconnectAttempts = 0;
 					const ready = this.eventReady;
 					this.eventReady = undefined;
 					ready?.resolve();
 					try {
 						const callback = this.onEventReady?.(reconnected);
 						if (callback && typeof (callback as Promise<void>).then === "function") {
-							void Promise.resolve(callback).catch((cause) => {
-								fail(
-									new HerdrRpcError("Herdr event-ready callback rejected.", {
-										code: "ready_callback_error",
-										kind: "protocol",
-										method: "events.subscribe",
-										requestId,
-										delivery: "unknown",
-										cause,
-									}),
-									true,
-								);
-							});
+							void Promise.resolve(callback).then(
+								() => {
+									if (!handledFailure && generation === this.eventGeneration && this.eventSocket === socket) {
+										this.eventReconnectAttempts = 0;
+									}
+								},
+								(cause) => {
+									fail(
+										new HerdrRpcError("Herdr event-ready callback rejected.", {
+											code: "ready_callback_error",
+											kind: "protocol",
+											method: "events.subscribe",
+											requestId,
+											delivery: "unknown",
+											cause,
+										}),
+										true,
+									);
+								},
+							);
+						} else if (!handledFailure && generation === this.eventGeneration && this.eventSocket === socket) {
+							this.eventReconnectAttempts = 0;
 						}
 					} catch (cause) {
 						fail(

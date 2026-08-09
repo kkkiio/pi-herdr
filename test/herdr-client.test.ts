@@ -381,6 +381,7 @@ describe.skipIf(process.platform === "win32")("HerdrClient Unix socket transport
 
 	it("retries a reconnected event stream when reconciliation rejects", async () => {
 		const readiness: boolean[] = [];
+		const reconnectAttemptsAtReady: number[] = [];
 		const reported: HerdrRpcError[] = [];
 		const api = await startApi((request, connection, socket) => {
 			const acknowledgement = `${JSON.stringify({
@@ -407,6 +408,7 @@ describe.skipIf(process.platform === "win32")("HerdrClient Unix socket transport
 			onEventError: (error) => reported.push(error),
 			onEventReady: async (reconnected) => {
 				readiness.push(reconnected);
+				reconnectAttemptsAtReady.push((client as unknown as { eventReconnectAttempts: number }).eventReconnectAttempts);
 				if (reconnected && readiness.filter(Boolean).length === 1) throw new Error("snapshot transport failed");
 			},
 		});
@@ -416,6 +418,10 @@ describe.skipIf(process.platform === "win32")("HerdrClient Unix socket transport
 
 		expect(api.connections).toBe(3);
 		expect(readiness).toEqual([false, true, true]);
+		expect(reconnectAttemptsAtReady).toEqual([0, 1, 2]);
+		await vi.waitFor(() =>
+			expect((client as unknown as { eventReconnectAttempts: number }).eventReconnectAttempts).toBe(0),
+		);
 		expect(reported).toContainEqual(expect.objectContaining({ code: "ready_callback_error", kind: "protocol" }));
 		client.stopEvents();
 	});
