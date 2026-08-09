@@ -125,7 +125,7 @@ export class AgentDefinitionStore {
 					}
 					return entry.name.slice(0, -3).toLowerCase() === expectedName;
 				})
-				.sort((left, right) => left.name.localeCompare(right.name));
+				.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
 
 			if (matches.length > 1) {
 				throw new Error(
