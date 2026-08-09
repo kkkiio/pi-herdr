@@ -2,7 +2,7 @@
 
 ![pi-herdr logo](assets/pi-herdr-logo.png)
 
-pi-herdr 为运行在 [herdr](https://herdr.dev) 中的 pi 提供持久后台 Agent 和 live 会话消息通信。每个 Agent 使用独立 tab 和正常落盘的 pi session，可以在 tab 存活期间长期空闲并反复复用；tab 或进程消失后，session 与可选 worktree 仍保留，但不再由 pi-herdr 自动恢复或管理。
+pi-herdr 把 [herdr](https://herdr.dev) 原生的 live Agent 控制面接入 pi，让 Primary Agent 可以创建、发现和继续驱动独立 tab 中的持久后台 Agent。每个 Agent 使用正常落盘的 pi session，可以在 tab 存活期间长期空闲并反复复用；tab 或进程消失后，session 与可选 worktree 仍保留，但不再由 pi-herdr 自动恢复或管理。
 
 pi-herdr 只在 `HERDR_ENV=1` 且当前 herdr socket 可用时注册控制面；普通终端中的 pi 会静默跳过该扩展。
 
@@ -21,6 +21,8 @@ pi install @kkkiio/pi-herdr
 ```text
 创建一个名为 code-explorer 的 explorer Agent，调查认证逻辑在哪里实现，并把结论回复给我。
 ```
+
+`Agent` 工具会列出可直接使用的用户级与 bundled definitions。项目角色优先由 Primary 在目标仓库的 `.pi/agents/`、`.agents/agents/` 或项目 `AGENTS.md` 中发现，并把选中的 Markdown 路径显式传给 `definition`；找不到合适的项目角色时再使用 `explorer` 或 `general-purpose`。`definition` 只选择角色；需要在其他目录工作时通过独立的 `cwd` 指定。
 
 Agent 回复后会保持 idle。需要继续调查时，Primary Agent 通过 `ListAgents` 找到它，再用 `SendMessage` 发送后续请求：
 
@@ -73,6 +75,6 @@ Agent 回复后会保持 idle。需要继续调查时，Primary Agent 通过 `Li
 
 - [Agents](docs/agents.md) — Agent、StopAgent、生命周期与配置。
 - [Messaging](docs/messaging.md) — `ListAgents`、`SendMessage` 与 reply envelope。
-- [Agent definitions](docs/agent-definitions.md) — bundled 与自定义 Agent Markdown。
+- [Agent definitions](docs/agent-definitions.md) — 项目路径、用户级与 bundled Agent Markdown。
 - [Architecture](docs/architecture.md) — live runtime、单扩展双模式与 herdr 集成。
 - [Architecture decisions](docs/adr/) — 关键设计选择及理由。

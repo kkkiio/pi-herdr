@@ -1,6 +1,6 @@
 # Architecture
 
-pi-herdr 是 herdr live session 上的轻量 Agent 协作层。Primary 创建后台 Agent，每个 Agent 使用独立 tab、受管 pane 和正常落盘的全新 pi session；通信、发现和状态都以当前 socket 可见的 runtime 为边界。
+pi-herdr 是 pi 对 herdr 原生 live Agent 控制面的接入层。Primary 创建后台 Agent，每个 Agent 使用独立 tab、受管 pane 和正常落盘的全新 pi session；通信、发现和状态都以当前 socket 可见的 runtime 为边界。
 
 ```text
 Herdr live session
@@ -44,7 +44,7 @@ src/
 - `index.ts`：读取 runtime role、环境与设置，装配同一个 extension 的 Primary/Spawned 工具表面。
 - `agent-supervisor.ts`：管理当前 Primary 创建的 live Agent 内存记录、容量、事件和创建回滚。
 - `agent-runtime.ts`：构造 pi 启动参数、system prompt、消息 envelope 与 rename 同步。
-- `agent-definitions.ts`：严格发现、解析并固定 Markdown definition。
+- `agent-definitions.ts`：构建用户级/bundled catalog，解析显式项目路径并执行来源相关的严格 Markdown schema。
 - `herdr-client.ts`：类型化 socket RPC、事件订阅、只读重试和 live snapshot reconciliation。
 - `tools.ts`：实现 `Agent`、`StopAgent`、`ListAgents` 与 `SendMessage`。
 - `ui.ts`：`/agents`、状态与配置诊断。
@@ -65,14 +65,14 @@ socket 重连后，supervisor 通过 `session.snapshot` / `agent.list` 删除已
 
 共享 workspace 创建流程：
 
-1. 校验环境、设置、definition、name 和初始模型。
+1. 校验环境、设置、definition selector、cwd、name 和初始模型。
 2. 检查当前 Primary 的 live Agent 数量。
-3. `tab.create` 创建不抢焦点的 name tab，并取得 root pane。
+3. `tab.create` 使用解析后的 cwd 创建不抢焦点的 name tab，并取得 root pane。
 4. `agent.start` 启动全新持久 pi session、同一个 extension 的 Spawned role 及 definition 配置。
 5. `agent.prompt` 投递带 `<from ...>` envelope 的初始请求。
 6. 只有 prompt 被 herdr 接受后才写入内存记录并返回 `launched`。
 
-Worktree 流程用 `worktree.create` 替换第 3 步，直接复用其返回的 workspace、tab 和 root pane。
+Worktree 流程用传入同一 cwd 的 `worktree.create` 替换第 3 步，直接复用其返回的 workspace、tab 和 root pane。Definition 文件位置不参与 cwd 或 worktree 选择。
 
 失败时按已完成步骤逆序回滚：关闭新 pane/tab、删除尚未承载工作的 session，并以 `force: false` 移除本次新建的 worktree。Herdr 拒绝安全移除时保留现场；mutating RPC 不自动重放，清理失败与残留路径合并进最终错误。
 

@@ -4,18 +4,32 @@ Agent definition 是带 YAML frontmatter 的 Markdown 文件。Frontmatter 决�
 
 Definition 只在 `Agent` 创建时解析。文件之后发生变化不会热更新已经 live 的 Agent。
 
-## Discovery
+## Selection and Discovery
 
-pi-herdr 先确定 Primary 创建时的 definition root：位于 Git worktree 中时使用 `git rev-parse --show-toplevel` 的结果，否则使用当前 cwd。随后按以下优先级查找：
+`Agent({ definition })` 接受 catalog 名称或项目 definition 路径。
 
-1. `<root>/.pi/agents/<name>.md`
-2. `<root>/.agents/agents/<name>.md`
-3. `~/.pi/agent/agents/<name>.md`
-4. npm 包内 `agents/<name>.md`
+### Definition catalog
 
-文件名去掉 `.md` 后作为 `agent_type`，匹配大小写不敏感。高优先级文件完整覆盖低优先级定义，不做字段合并。
+Primary 启动时，pi-herdr 从以下两个位置构建 definition catalog：
 
-同一层级出现大小写重名、选中的文件包含未知字段、类型错误或非法值时，该 definition 不可用并产生明确诊断；pi-herdr 不回退到低优先级同名文件，避免配置错误静默改变角色或权限。
+1. `~/.pi/agent/agents/<name>.md`
+2. npm 包内 `agents/<name>.md`
+
+用户级 definition 与 bundled definition 同名时完整覆盖 bundled definition，不做字段合并。显式禁用或格式错误的用户级 definition 同样保留该名字，不静默回退到 bundled 文件；它产生配置诊断且不能创建。Catalog 中每个有效、启用的名称和 description 会写入 `Agent` 工具的 `definition` 参数说明，让 Primary 在没有合适项目 definition 时直接选择，同时保留项目路径输入。Catalog 是当前 Primary 的工具表面，用户级目录变化后重新启动 Primary 才会刷新列表；实际创建时仍重新读取并严格校验选中的文件。
+
+Catalog name 不包含 `/`、`\`，也不以 `.md` 结尾，匹配大小写不敏感。文件名去掉 `.md` 后是 definition name。
+
+### Project paths
+
+项目 definition 不进入全局 catalog，也不由 pi-herdr 自动扫描。Primary 使用普通文件搜索、Git 查询和项目说明检查任务相关仓库中的：
+
+- `<project>/.pi/agents/*.md`
+- `<project>/.agents/agents/*.md`
+- `AGENTS.md` 中明确推荐的 definition 路径
+
+找到合适角色后，Primary 把绝对路径或以 `./`、`../` 开头的显式相对路径传给 `definition`。相对路径以 Primary 调用 `Agent` 时的 cwd 为基准；pi-herdr 规范化路径并要求目标是带 `.md` 后缀的普通文件。Definition 路径是精确选择，不参与 catalog 的覆盖或回退。
+
+Definition path 只决定角色配置，不隐式改变 spawned Agent 的 workspace 或 cwd。`cwd` 是独立的 `Agent` 参数；它与相对 definition path 分别基于 Primary 调用时的 cwd 解析，二者不互相推导或校验。Definition 只在创建时解析，文件之后发生变化不会热更新已经 live 的 Agent。
 
 ## Format
 
@@ -48,12 +62,12 @@ enabled: true
 | `model` | string / string[] | 初始模型或按顺序尝试的候选列表 |
 | `thinking` | string | 初始 thinking level |
 | `tools` | string[] | 工作工具 allowlist；`[all]` 表示全部可用工作工具 |
-| `extensions` | boolean / string[] | `true` 发现普通 extensions，`false` 禁用，数组显式加载指定资源 |
-| `skills` | boolean / string[] | `true` 发现 skills，`false` 禁用，数组显式加载指定资源 |
+| `extensions` | boolean | `true` 使用 pi 原生发现，`false` 禁用 |
+| `skills` | boolean | `true` 使用 pi 原生发现，`false` 禁用 |
 | `disallowed_tools` | string[] | 从最终工作工具中移除的工具 |
 | `enabled` | boolean | `false` 时该角色不可创建 |
 
-集合字段只接受 YAML 数组，不解析 CSV。`extensions` 与 `skills` 数组中的相对路径以当前选中的 definition 文件目录为基准；绝对路径保持不变。
+集合字段只接受 YAML 数组，不解析 CSV。所有来源的 `extensions` 与 `skills` 都只接受 boolean；`true` 不传显式资源或 `--no-*` flag，由 Spawned pi 从实际 cwd 原生发现并应用 project trust，`false` 关闭对应发现。pi-herdr 不通过 definition 加载具体 extension 或 skill 路径。
 
 Frontmatter 是封闭 schema，表格之外的字段全部报错。Worktree 是单次 `Agent` 调用的文件系统选择，不属于角色 definition。
 
@@ -65,14 +79,15 @@ Bundled explorer 使用明确的只读工具数组，并设置 `extensions: fals
 
 Bundled general-purpose 使用 `tools: [all]`、`extensions: true`、`skills: true`，让 pi 按原生信任与资源发现规则加载普通能力。
 
+显式 definition path 本身是 `Agent` 的调用输入，不属于 pi 自动发现的项目资源，也不经过 project trust。pi-herdr 不把 project trust 规则写入 Primary prompt，也不维护或覆盖 pi 的 trust 决定。Spawned pi 针对自己的实际 cwd 正常执行原生 project trust；启动参数不传 `--approve` 或 `--no-approve`。
+
 ## Model Resolution
 
 模型在创建时按以下优先级解析：
 
 1. `Agent({ model })` 显式参数。
-2. 选中的自定义 definition。
-3. bundled definition。
-4. Primary 当前模型。
+2. 当前选中的 definition。
+3. Primary 当前模型。
 
 候选必须已经认证、存在于 pi model registry，并符合当前 scoped/enabled models。ID 匹配把 `.` 与 `-` 视为等价；多个 provider 命中同一 ID 时使用 registry 顺序中的第一个可用项。
 

@@ -12,10 +12,11 @@ Primary Agent 使用 `Agent` 创建后台 Agent：
 Agent({
   description: string,
   prompt: string,
-  agent_type: string,
+  definition: string,
   name: string,
   model?: string | string[],
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
+  cwd?: string,
   isolation?: "worktree",
 }) => {
   status: "launched",
@@ -26,14 +27,21 @@ Agent({
 
 - `description` 是工具结果与 UI 详情中的简短说明，不参与 tab label。
 - `prompt` 是第一条消息，使用与 `SendMessage` 相同的 `<from ...>` envelope。
-- `agent_type` 是创建时解析并固定的 definition 名称。
+- `definition` 是创建时解析并固定的开放字符串：catalog 名称按用户级、bundled 顺序解析；以 `.md` 结尾的绝对路径或显式相对路径精确选择项目 definition。相对路径以 Primary 调用时的 cwd 为基准。
 - `name` 同时作为 pi session name、herdr live route name 和 tab label，必须符合 `[a-z][a-z0-9_-]{0,31}`。
 - `model` 与 `thinking` 覆盖 definition 的初始值；Agent 启动后允许用户使用 pi 原生能力修改。
-- `isolation: "worktree"` 创建独立 worktree workspace；未设置时共享当前 workspace 与 cwd。
+- `cwd` 选择 Spawned Agent 的工作目录；相对路径以 Primary 调用时的 cwd 为基准，未设置时继承该 cwd。
+- `isolation: "worktree"` 从解析后的 `cwd` 创建独立 worktree workspace；未设置时在当前 workspace 中创建使用该 cwd 的 tab。
+
+`Agent` 工具注册时把当前有效的用户级与 bundled definition 名称、description 写入 `definition` 参数说明；参数本身保持开放字符串，以便接受项目路径。同名用户级 definition 覆盖 bundled definition。Primary 在创建前先用普通读取、`rg` 或 Git 工具检查目标仓库的 `.pi/agents/`、`.agents/agents/` 与 `AGENTS.md`，找到更适合任务的项目 definition 时传入其明确路径。pi-herdr 不扫描当前仓库之外的目录，也不按当前 Git root 隐式覆盖显式选择。
+
+Definition path 只选择启动模板，不改变 Agent 的 workspace 或 cwd。外部项目中的 definition 可以用于任意 cwd；如果 Agent 还需要在该外部项目中运行，调用方同时传入对应的 `cwd`。两条路径独立解析，pi-herdr 不从 definition 文件位置推断或校验 cwd。
+
+所有 definition 的 `extensions` 与 `skills` 都只接受 boolean。`true` 让 Spawned pi 从实际 cwd 原生发现资源并应用 project trust，`false` 关闭发现；definition 不能把具体 extension/skill 路径变成显式启动参数。Definition 文件本身是 `Agent` 的显式输入，不属于 pi project trust 检查的自动发现资源。
 
 创建过程只有在 `agent.start` 成功且初始 `agent.prompt` 被 herdr 接受后才返回 `launched`，不等待 Agent 完成工作。任一步失败都会回滚本次新建的 pane/tab、尚未承载工作的 session，并以 `force: false` 尝试移除新 worktree；herdr 拒绝移除时保留现场，残留资源进入错误信息。
 
-共享 workspace 时，pi-herdr 使用 `tab.create` 返回的 root pane。worktree 模式直接复用 `worktree.create` 返回的 workspace、tab 与 root pane，不创建第二个 tab。
+共享 workspace 时，pi-herdr 把解析后的 cwd 传给 `tab.create` 并使用其 root pane。worktree 模式把同一 cwd 传给 `worktree.create`，直接复用返回的 workspace、tab 与 root pane，不创建第二个 tab。Definition 文件位置不参与两种创建流程。
 
 ## StopAgent
 

@@ -35,7 +35,7 @@ pi-herdr 当前处于架构与文档阶段。实现代码尚未开始；`docs/` 
 
 - **Primary Agent** — 调用 `Agent` 工具创建另一个持久 Agent 的 pi 会话。
 - **Spawned Agent** — 由 pi-herdr 创建、拥有独立 tab 和持久 pi session 的后台 Agent。 _Avoid_: one-shot subagent, team member.
-- **Agent definition** — `agents/*.md` 或用户覆盖路径中的角色配置与 prompt。
+- **Agent definition** — 用户级/bundled catalog 中按名称选择，或由 Primary 从项目 `.pi/agents`、`.agents/agents` 显式选择路径的角色配置与 prompt。
 - **Agent name** — 同时用作 pi session name、herdr live Agent alias 和 tab label；live 时可通过 `/name` 同步修改。
 - **Agent tab** — 一个 spawned Agent 在 herdr 中的用户可见容器。
 - **Managed pane** — Agent tab 内实际运行 pi 进程、承载 herdr lifecycle state 的 pane。
@@ -54,7 +54,7 @@ When changing Agent lifecycle, spawning, or herdr integration:
 
 - Keep every spawned Agent background-only and session-persistent.
 - Create one herdr tab per Agent; run pi in that tab's managed pane. Reuse the tab/root pane returned by `worktree.create`.
-- Share the creator's workspace and cwd by default; create a worktree only for explicit `isolation: "worktree"`.
+- Share the creator's workspace and inherit its cwd by default. An explicit `cwd` selects the Spawned Agent working directory without changing definition resolution; create a worktree only for explicit `isolation: "worktree"`, passing the resolved cwd to herdr.
 - Keep herdr `AgentInfo` and `agent_status` unchanged in tool results; UI may visually group `done` with idle.
 - Treat pane/tab/process disappearance as the end of pi-herdr management. Preserve session/worktree, but do not add offline registry, mailbox or automatic recovery.
 - Do not add active/running concurrency limits. Enforce only the current Primary process's `piHerdr.maxMembers` safety limit.
@@ -82,9 +82,15 @@ When changing `agents/explorer.md`, keep Bash available for `rg`, Git queries, s
 
 When changing `agents/*.md` or the definition loader, keep lifecycle and messaging rules in the shared Agent system prompt; keep role-specific expertise in each Markdown body.
 
-Keep definition collections as YAML arrays. The supported fields are exactly `description`, `model`, `thinking`, `tools`, `extensions`, `skills`, `disallowed_tools`, and `enabled`; reject every unknown field.
+Keep definition collections as YAML arrays. The supported fields are exactly `description`, `model`, `thinking`, `tools`, `extensions`, `skills`, `disallowed_tools`, and `enabled`; reject every unknown field. Keep `extensions` and `skills` boolean for every definition source: `true` leaves native cwd discovery enabled, while `false` disables it. Never turn definition resource paths into explicit pi CLI extension or skill inputs.
 
-Resolve project definitions from the current Git worktree root, or current cwd outside Git. Use `.pi/agents`, then `.agents/agents`, then the global directory, then bundled definitions. Treat a malformed selected definition as an error instead of falling back.
+List effective enabled definitions from the global directory and then bundled definitions in the open-string `definition` parameter description. Global names shadow bundled names; malformed or disabled global definitions do not fall back to a same-name bundled definition.
+
+Use `definition: string` as the selector. Resolve a bare name from global then bundled definitions; resolve an absolute or explicit relative `.md` path exactly, with relative paths based on the Primary call cwd. Do not automatically select project definitions from the Primary Git root or scan external repositories.
+
+Tell Primary Agents to inspect task-relevant `.pi/agents`, `.agents/agents`, and project `AGENTS.md` with ordinary file/Git tools before using the fallback catalog. A definition path selects role configuration only and never implies Agent workspace or cwd. Resolve relative `definition` paths and relative `cwd` values independently from the Primary call cwd.
+
+Treat an explicit definition path as `Agent` input rather than a pi auto-discovered project resource. Do not inject project trust policy into Primary prompts or tool guidelines. Do not read, write, cache or override pi trust state, and do not pass `--approve` or `--no-approve`; every Spawned pi resolves native project trust for its actual cwd.
 
 When adding npm packaging, include both `dist/` and `agents/` in `package.json#files`, resolve bundled files from `import.meta.url`, and verify the tarball contains both Markdown definitions.
 
