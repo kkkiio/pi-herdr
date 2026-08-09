@@ -2,20 +2,14 @@
 
 ![pi-herdr logo](assets/pi-herdr-logo.png)
 
-pi-herdr 把 [Herdr](https://herdr.dev) 原生的 live Agent 控制面接入 Pi，让 Primary Agent 可以创建、发现和继续驱动独立 tab 中的持久后台 Agent。每个 Spawned Agent 使用正常落盘的 Pi session；只要 pane 仍然 live，它就能保留上下文并反复接收任务。
-
-当前实现可从源码安装，尚未发布到 npm。它面向 Herdr 0.7.5、socket protocol 17；在普通终端中启动 Pi 时，扩展不会注册 Herdr 控制面。
+pi-herdr 是一个 [Pi](https://github.com/earendil-works/pi) 扩展，让你在 [Herdr](https://herdr.dev) 中把任务交给独立 tab 里的后台 Agent。每个 Agent 都有自己的持久 Pi session，会保留上下文，可以反复接收任务、回复结果，并与其他 live Pi 会话通信。
 
 ## Installation
 
-先安装 [Herdr 0.7.5](https://github.com/herdrdev/herdr/releases/tag/v0.7.5)、Pi 0.83 或更高版本与 Node.js 22.19 或更高版本，再安装当前源码：
+需要 Herdr 0.7.5、Pi 0.83 或更高版本，以及 Node.js 22.19 或更高版本。
 
 ```bash
-git clone https://github.com/kkkiio/pi-herdr.git
-cd pi-herdr
-npm ci
-npm run build
-pi install .
+pi install npm:@kkkiio/pi-herdr
 ```
 
 ## Usage
@@ -26,51 +20,44 @@ pi install .
 herdr
 ```
 
-在 pane 中运行 Pi：
+在 Herdr pane 中启动 Pi：
 
 ```bash
 pi
 ```
 
-然后直接让 Primary 创建一个具名 Agent：
+然后直接让 Pi 创建一个 Agent：
 
 ```text
-创建一个名为 code-explorer 的 explorer Agent，调查认证逻辑在哪里实现，并把结论回复给我。
+创建一个 explorer Agent，调查认证逻辑在哪里实现，并把结论回复给我。
 ```
 
-`Agent` 工具会列出可直接使用的用户级与 bundled definitions。需要项目专属角色时，推荐 Primary 检查目标仓库的 `.pi/agents/` 和 `.agents/agents/`，并把选中的 Markdown 路径显式传给 `definition`；没有合适角色时再使用 `explorer` 或 `general-purpose`。`definition` 只选择角色，需要改变工作目录时使用独立的 `cwd`。
-
-Agent 回复后会保持 idle。继续使用同一上下文时，再告诉 Primary：
+Agent 会在单独的 tab 中工作。使用 `/agents` 可以查看当前 live 的 Agent 和 Pi peer；需要继续调查时，继续告诉 Pi：
 
 ```text
-让 code-explorer 再检查刷新令牌的错误处理，并回复新增发现。
+让刚才的 explorer Agent 再检查刷新令牌的错误处理，并回复新增发现。
 ```
 
-内置 `explorer` 适合只读搜索与代码定位；`general-purpose` 适合实现、测试和开放式调查。关闭 Agent pane 或 tab 会结束 pi-herdr 对该 live runtime 的管理，但 Pi session 与可选 worktree 会保留，供用户通过 Pi、Git 和 Herdr 原生管理。
+内置 `explorer` 适合只读搜索与代码定位，`general-purpose` 适合实现、测试和开放式任务。项目也可以提供[自定义 Agent definition](docs/agent-definitions.md)。
+
+Agent 的 pane 保持运行时，其 session 和上下文可以持续复用。关闭 pane 或 tab 会停止对应的 live Agent，但不会删除 Pi session 或可选 worktree。
 
 ## Herdr RPC Support
 
-pi-herdr 只把 `Agent`、`StopAgent`、`ListAgents` 和 `SendMessage` 暴露给 Pi；下列 Herdr RPC 是这些工具及其生命周期管理所依赖的控制面。
+pi-herdr 只封装后台 Agent 工作流需要的 Herdr 能力，不替代 Herdr 自身的 workspace、tab、pane 或 worktree 管理。
 
-| Herdr RPC                               | pi-herdr 行为                                                             |
-| --------------------------------------- | ------------------------------------------------------------------------- |
-| `ping`, `session.snapshot`              | 读取 Herdr version、校验 protocol 17，并在启动与重连时核对 live runtime   |
-| `agent.list`, `agent.get`               | `ListAgents`、目标解析、启动就绪检查与回执快照                            |
-| `tab.create`                            | 在解析后的 `cwd` 创建不抢焦点的共享 workspace Agent tab                    |
-| `worktree.create`, `tab.rename`         | 从解析后的 `cwd` 创建 checkout，并显式同步返回 tab 的名称                   |
-| `agent.start`, `agent.prompt`           | 启动持久 Pi session；确认交互就绪后发送初始请求与后续消息                 |
-| `agent.rename`, `tab.get`, `tab.rename` | Spawned Agent 执行 `/name` 后同步 live route 与 tab label，并在失败时恢复 |
-| `pane.current`                          | 识别调用者 pane，阻止 `StopAgent` 关闭自身                                |
-| `pane.close`                            | `StopAgent` 与创建失败后的精确 pane 清理                                  |
-| `tab.close`, `worktree.remove`          | 仅回滚本次失败创建的 tab/worktree，不清理既有用户资源                     |
-| `events.subscribe`                      | 使用专用长连接跟踪 live pane、tab 和 Agent 状态；普通 RPC 不复用该连接    |
+| Pi 能力                         | Herdr RPC                                                     | 用户可见行为                                                   |
+| ------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------- |
+| `Agent`                         | `tab.create` / `worktree.create`, `agent.start`, `agent.prompt` | 在独立 tab 中启动持久 Agent，可选择共享目录或独立 Git worktree |
+| `ListAgents`, `SendMessage`     | `agent.list`, `agent.get`, `agent.prompt`                     | 发现并联系 live Agent 或 Pi peer；不提供离线消息队列           |
+| `/name`, `StopAgent`            | `agent.rename`, `tab.rename`, `pane.close`                    | 同步 Agent 名称；停止 Agent 时保留 session 和 worktree         |
+| 其他 Herdr 管理能力             | 其余 `workspace.*`、`tab.*`、`pane.*`、`worktree.*`、`layout.*` | 不由 pi-herdr 封装，直接使用 Herdr                              |
 
-其余 workspace、tab、pane、terminal input、layout、worktree 管理及 `events.wait` 等 Herdr 能力不由 pi-herdr 封装。详细边界见 [Herdr RPC integration](docs/herdr-rpc.md) 与 [Spawned Agent contract](docs/spawned-agent-contract.md)。
+协议兼容性和连接行为见 [Herdr RPC integration](docs/herdr-rpc.md)。
 
 ## Documentation
 
-- [Spawned Agent contract](docs/spawned-agent-contract.md) — 创建、Primary/Spawned 模式、name、持久性与停止语义。
-- [Messaging](docs/messaging.md) — `ListAgents`、`SendMessage` 与 reply envelope。
-- [Agent definitions](docs/agent-definitions.md) — 项目路径、用户级与 bundled Agent Markdown。
-- [Herdr RPC integration](docs/herdr-rpc.md) — socket protocol、连接模型、事件、重试与 RPC 边界。
-- [Architecture decisions](docs/adr/) — 已接受的关键设计选择及理由。
+- [Spawned Agent contract](docs/spawned-agent-contract.md) — Agent 的创建、生命周期、隔离与停止行为。
+- [Agent definitions](docs/agent-definitions.md) — 使用内置角色或定义项目角色。
+- [Messaging](docs/messaging.md) — 发现 Agent、发送消息与回复。
+- [Herdr RPC integration](docs/herdr-rpc.md) — Herdr 版本、协议和 RPC 边界。
