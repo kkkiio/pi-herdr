@@ -18,10 +18,10 @@ pi-herdr 是 TypeScript ESM Pi extension。`src/` 实现 Herdr 0.7.5 / protocol 
 ├── .github/
 │   └── workflows/ci.yml                   # main push/PR 全量回归 CI
 ├── docs/
-│   ├── agents.md                          # Agent API、name、tab 与生命周期
+│   ├── spawned-agent-contract.md          # 创建、双模式、name、持久性与停止语义
 │   ├── messaging.md                       # ListAgents、SendMessage 与 reply
 │   ├── agent-definitions.md               # Markdown frontmatter 用户参考
-│   ├── architecture.md                    # 当前整体架构
+│   ├── herdr-rpc.md                       # Socket protocol、事件、重试与 RPC 边界
 │   └── adr/
 │       ├── 001-persistent-background-agents.md
 │       ├── 002-default-model-selection.md
@@ -47,7 +47,7 @@ pi-herdr 是 TypeScript ESM Pi extension。`src/` 实现 Herdr 0.7.5 / protocol 
 └── package.json                           # npm/Pi manifest 与 canonical scripts
 ```
 
-实现时保持 `src/` 为少量深模块；按 `docs/architecture.md` 的模块边界组织，不要为单个小动作创建 helper 文件或浅包装层。
+实现时保持 `src/` 为少量深模块；Herdr transport 遵守 `docs/herdr-rpc.md`，Spawned lifecycle 遵守 `docs/spawned-agent-contract.md`，不要为单个小动作创建 helper 文件或浅包装层。
 
 ## Domain Language
 

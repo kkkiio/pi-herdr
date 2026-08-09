@@ -70,13 +70,9 @@ enabled: true
 
 Frontmatter 是封闭 schema，表格之外的字段全部报错。Worktree 是单次 `Agent` 调用的文件系统选择，不属于角色 definition。
 
-## Runtime Roles and Resources
+## Resources and Project Trust
 
-Primary 与 Spawned 运行同一个 pi-herdr extension。创建命令注入 Spawned role，使同一入口只注册 `ListAgents`、`SendMessage` 与 name 同步；无论 definition 如何配置普通 extensions，pi-herdr 都不会在 Spawned 模式注册 `Agent` 或 `StopAgent`。
-
-Bundled explorer 使用明确的只读工具数组，并设置 `extensions: false`、`skills: false`。pi-herdr 的 Spawned 模式仍作为创建命令显式指定的 extension 加载，不属于“普通 extensions”发现范围。
-
-Bundled general-purpose 使用 `tools: [all]`、`extensions: true`、`skills: true`，让 Pi 按原生信任与资源发现规则加载普通能力。
+Definition 只配置普通 extensions、skills 与工作工具；Primary/Spawned 的工具边界由 [Spawned Agent Contract](spawned-agent-contract.md#单扩展双模式) 定义，不受 definition 内容影响。pi-herdr 的 Spawned 模式作为创建命令显式指定的 extension 加载，不属于普通 extensions 发现范围。
 
 显式 definition path 本身是 `Agent` 的调用输入，不属于 Pi 自动发现的项目资源，也不经过 project trust。pi-herdr 不把 project trust 规则写入 Primary prompt，也不维护或覆盖 Pi 的 trust 决定。Spawned Pi 针对自己的实际 cwd 正常执行原生 project trust；启动参数不传 `--approve` 或 `--no-approve`。
 
@@ -93,6 +89,20 @@ Bundled general-purpose 使用 `tools: [all]`、`extensions: true`、`skills: tr
 显式 `Agent({ model })` 候选全部不可用时创建失败。Definition 的默认候选全部不可用时静默继承 Primary 当前模型。
 
 model 和 thinking 只是初始配置。Agent 启动后，用户通过 `/model` 或其他 Pi 原生能力进行的显式修改正常写入 session，后续消息继续使用新状态。
+
+## Bundled Definitions
+
+### `explorer`
+
+- 使用 `read`、`bash`、`grep`、`find` 和 `ls`，并设置 `extensions: false`、`skills: false`。
+- Bash 只用于读取、Git 查询、统计与分析，不创建、修改或删除文件。
+- 初始模型优先选择 `gpt-5.6-luna`、`deepseek-v4-flash`，均不可用时继承 Primary 模型。
+
+### `general-purpose`
+
+- 使用全部工作工具，并设置 `extensions: true`、`skills: true`，让 Pi 按原生信任与资源发现规则加载普通能力。
+- 初始模型继承 Primary 模型。
+- 适合实现、重构、测试、文档和开放式调查。
 
 ## Packaging
 

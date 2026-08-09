@@ -65,12 +65,12 @@ pi-herdr 只把 `Agent`、`StopAgent`、`ListAgents` 和 `SendMessage` 暴露给
 | `tab.close`, `worktree.remove`          | 仅回滚本次失败创建的 tab/worktree，不清理既有用户资源                     |
 | `events.subscribe`                      | 使用专用长连接跟踪 live pane、tab 和 Agent 状态；普通 RPC 不复用该连接    |
 
-其余 workspace、tab、pane、terminal input、layout、worktree 管理及 `events.wait` 等 Herdr 能力不由 pi-herdr 封装。详细边界见 [Architecture](docs/architecture.md) 与 [Agents](docs/agents.md)。
+其余 workspace、tab、pane、terminal input、layout、worktree 管理及 `events.wait` 等 Herdr 能力不由 pi-herdr 封装。详细边界见 [Herdr RPC integration](docs/herdr-rpc.md) 与 [Spawned Agent contract](docs/spawned-agent-contract.md)。
 
 ## Documentation
 
-- [Agents](docs/agents.md) — `Agent`、`StopAgent`、name、tab 与生命周期。
+- [Spawned Agent contract](docs/spawned-agent-contract.md) — 创建、Primary/Spawned 模式、name、持久性与停止语义。
 - [Messaging](docs/messaging.md) — `ListAgents`、`SendMessage` 与 reply envelope。
 - [Agent definitions](docs/agent-definitions.md) — 项目路径、用户级与 bundled Agent Markdown。
-- [Architecture](docs/architecture.md) — runtime 边界、socket 协议和创建事务。
+- [Herdr RPC integration](docs/herdr-rpc.md) — socket protocol、连接模型、事件、重试与 RPC 边界。
 - [Architecture decisions](docs/adr/) — 已接受的关键设计选择及理由。
