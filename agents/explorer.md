@@ -4,10 +4,14 @@ model:
   - gpt-5.6-luna
   - deepseek-v4-flash
 thinking: low
-max_turns: 20
-tools: read, bash, grep, find, ls
-inherit_context: false
-isolated: true
+tools:
+  - read
+  - bash
+  - grep
+  - find
+  - ls
+extensions: false
+skills: false
 enabled: true
 ---
 

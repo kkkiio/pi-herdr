@@ -1,123 +1,94 @@
-# ADR-003: Agent Definitions and Discovery
+# ADR-003: Agent Definitions and Single-extension Roles
 
 - 状态：提议（Proposed）
 - 日期：2026-08-09
 
-## 上下文
+## Context
 
-pi-herdr 需要提供 Explorer 和 General Purpose 两个内置角色，同时允许项目、工作区和用户覆盖角色。角色定义应该是可发布、可阅读的资源，不应散落在 TypeScript 字符串中。
+pi-herdr 需要发布 Explorer 和 General Purpose 两个角色，并允许项目、workspace convention 和用户目录覆盖。角色配置必须可阅读、可验证，并映射到 pi 原生模型、工具、extensions 和 skills 能力。
 
-持久 Agent 还需要一组公共协作规则。角色 prompt 与控制面 prompt 必须分离，避免自定义 definition 意外删除 identity、reply 和生命周期约束。
+Primary 与 Spawned 需要不同工具表面，但它们属于同一个 npm extension，不应被实现成两个独立 extension 包或互相漂移的入口。
 
-## 决策
+## Decision
 
-### 1. Bundled definition 使用 Markdown 文件
+### 1. Markdown definitions
 
-npm 包根目录包含：
+Bundled definitions 位于 npm 包的 `agents/` 目录，由 YAML frontmatter 和 Markdown body 组成。Body 追加到公共 Spawned system prompt，不替换 identity、reply、live lifecycle 和禁止递归 spawn 等控制面规则。
 
-```text
-agents/
-├── explorer.md
-└── general-purpose.md
-```
+运行时通过 `import.meta.url` 定位 bundled 资源。未来 `package.json#files` 同时包含 `dist` 与 `agents`，发布检查断言两份 Markdown 进入 tarball。
 
-文件由 YAML frontmatter 和 Markdown body 组成。Body 追加到公共 Agent system prompt，而不是替换整个 system prompt。
+### 2. Root and precedence
 
-公共 prompt 负责：
+在 Git worktree 中，definition root 是 Primary 创建时的 Git top-level；非 Git 环境使用当前 cwd。优先级为：
 
-- 当前 Agent identity 和 `createdBy`。
-- sender 与 reply 地址的使用方法。
-- 完成当前请求后回复并保持 idle。
-- 禁止创建下级 Agent 或管理其他 Agent runtime。
-
-角色 body 只描述专业职责、工作方式和输出要求。
-
-### 2. npm 明确包含资源
-
-`package.json` 的 `files` 白名单包含 `dist` 与 `agents`。运行时通过 `import.meta.url` 定位 `agents/`，不依赖调用者 cwd。
-
-CI 使用 `npm pack --dry-run` 或 `npm pack --json` 断言以下路径存在：
-
-```text
-package/agents/explorer.md
-package/agents/general-purpose.md
-```
-
-### 3. 自定义 definition 发现顺序
-
-优先级从高到低：
-
-1. `.pi/agents/<name>.md`
-2. `.agents/agents/<name>.md`
+1. `<root>/.pi/agents/<name>.md`
+2. `<root>/.agents/agents/<name>.md`
 3. `~/.pi/agent/agents/<name>.md`
-4. npm 包内 `agents/<name>.md`
+4. bundled `agents/<name>.md`
 
-同名高优先级文件完整覆盖低优先级定义。文件名是 `agent_type`，匹配时大小写不敏感。
+文件名匹配大小写不敏感，同名高优先级文件完整覆盖低优先级文件。Definition 只在创建时解析，不热更新 live Agent。
 
-### 4. Frontmatter 字段
+### 3. Strict schema
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `description` | string | 角色列表和工具 schema 使用的描述 |
-| `model` | string / string[] | 固定模型或偏好列表 |
-| `thinking` | string | 默认 thinking level |
-| `max_turns` | number | 每条入站消息触发运行时的 turn 上限 |
-| `tools` | CSV | 工作工具白名单 |
-| `extensions` | boolean / CSV | 普通扩展继承策略 |
-| `exclude_extensions` | CSV | 普通扩展黑名单 |
-| `skills` | boolean / CSV | skills 继承策略 |
-| `disallowed_tools` | CSV | 工作工具黑名单 |
-| `inherit_context` | boolean | 创建时是否 fork Primary 会话历史 |
-| `isolated` | boolean | 是否只加载允许的内置工作工具 |
-| `isolation` | `"worktree"` | 是否默认使用 Agent 专属 worktree |
-| `enabled` | boolean | 是否允许创建该角色 |
+支持字段只有：
 
-所有 Agent 都是后台且持久的，因此不支持 `run_in_background`、`persist_session`、`session_dir` 和 `output_transcript`。
-
-### 5. Spawned Agent 加载受限协作扩展
-
-通过 `Agent` 工具创建的 pi 进程加载专用 agent extension。无论 definition 如何限制工作工具，它始终提供：
-
-- `ListAgents`
-- `SendMessage`
-
-它不提供：
-
-- `Agent`
-- stop/remove Agent runtime 的能力
-- Primary 专用 UI 和 supervisor 控制工具
-
-这样 Agent 可以发现所有 herdr 可达会话、直接回复和协作，但不能递归创建下级 Agent。
-
-### 6. Explorer 保留 Bash
-
-Bundled Explorer 获得 Bash、read、grep、find 和 ls，以支持 `rg`、Git 查询、文件统计和批量分析；它不获得 edit 或 write。角色正文要求 Bash 只用于读取和分析，不创建、修改或删除文件。
-
-用户可以通过同名自定义 Markdown 调整工具范围；加载器和 `/agents` UI 必须展示最终有效工具集，使权限变化可见。
-
-## 备选方案
-
-| 方案 | 未采纳原因 |
+| Field | Type |
 | --- | --- |
-| 在 TypeScript 中 hardcode 两个角色 | 难以阅读、发布验证和被普通 Markdown 覆盖 |
-| definition 替换完整 system prompt | 自定义角色可能丢失消息、身份和生命周期协议 |
-| Spawned Agent 完全不加载 pi-herdr | 无法使用 `ListAgents` 和 `SendMessage`，与复用和直接回复目标冲突 |
-| 给 spawned Agent 加载完整控制面 | 会允许递归创建和操作其他 Agent runtime |
-| 为了绝对只读而移除 Bash | 会明显妨碍代码搜索、Git 调查和批量文件分析 |
+| `description` | string |
+| `model` | string / string[] |
+| `thinking` | valid thinking string |
+| `tools` | string[] |
+| `extensions` | boolean / string[] |
+| `skills` | boolean / string[] |
+| `disallowed_tools` | string[] |
+| `enabled` | boolean |
 
-## 后果
+集合不接受 CSV。Extension/skill 数组中的相对路径以当前 definition 文件目录为基准。
 
-### 正面
+未知字段、非法类型、非法值或同层级大小写重名会使当前选中的 definition 不可用并产生明确诊断，不回退低优先级同名文件。
 
-- Bundled 和自定义角色使用同一格式与解析路径。
-- 角色 prompt 与团队协议分离，覆盖 definition 不破坏控制面。
-- npm tarball 可以直接检查实际发布的 Agent 定义。
+Frontmatter 是封闭 schema，表格之外的字段全部报错。Agent 始终后台、使用全新持久 session；worktree 只由单次 `Agent` 参数决定。
 
-### 负面
+### 4. One extension, two runtime roles
 
-- 构建和发布流程必须显式携带非 TypeScript 资源。
-- 需要维护 Primary extension 与 agent extension 两套工具表面。
+Primary 与 Spawned 显式加载同一个 pi-herdr extension。创建 Agent 时通过 extension flag/启动参数注入 Spawned role：
 
-### 未解决
+- Primary 注册 `Agent`、`StopAgent`、`ListAgents`、`SendMessage` 与 UI。
+- Spawned 只注册 `ListAgents`、`SendMessage` 与 name 同步。
+
+角色判断发生在同一个入口，不通过“工具可见但执行时报权限错误”模拟权限。普通 extension/skill 发现不能使 Spawned 获得 pi-herdr 的 Primary 工具。
+
+### 5. Bundled resource policies
+
+Explorer 使用 `tools: [read, bash, grep, find, ls]`、`extensions: false`、`skills: false`。特殊 pi-herdr extension 是创建命令显式加载的控制面，不受普通 extension discovery 开关影响。
+
+General Purpose 使用 `tools: [all]`、`extensions: true`、`skills: true`，并遵循 pi 原生项目信任与资源发现规则。
+
+`disallowed_tools` 映射到 pi 的工具 denylist。需要精确限制普通 extension 时使用显式 extensions allowlist。
+
+## Alternatives
+
+| Alternative | Why not chosen |
+| --- | --- |
+| TypeScript hardcode definitions | 不利于阅读、覆盖和 npm 资源验证 |
+| Primary/Spawned 分成两个 extension | 容易造成协议、工具和版本漂移 |
+| 所有 runtime 注册全部工具后运行时拒绝 | 模型仍能看到无权使用的 Agent/StopAgent，工具表面不真实 |
+| CSV 与数组同时支持 | 扩大解析与诊断表面，没有未发布兼容需求 |
+| Extension blacklist | 需要复制 pi 的 extension discovery，显式 allowlist 已能表达边界 |
+
+## Consequences
+
+### Positive
+
+- 单入口确保消息、identity 和 rename 行为一致。
+- Definition schema 小且严格，可直接映射 pi 原生启动参数。
+- Bundled 与自定义角色使用相同解析路径。
+
+### Negative
+
+- 自定义 definition 的旧式 CSV 或未知字段会直接失败。
+- General Purpose 加载普通 extensions/skills 时仍受用户项目信任与第三方资源质量影响。
+
+### Unresolved
 
 - 无。

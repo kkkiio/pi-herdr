@@ -1,12 +1,12 @@
 # Agents
 
-pi-herdr 的 Agent 由某个 Primary Agent 创建，并拥有独立 herdr tab。pi 进程运行在该 tab 的受管 pane 中，使用正常落盘的 session。完成当前请求后，Agent 进入空闲状态并保留上下文，任何能通过 herdr 到达它的 Agent 都可以继续发送消息。
+pi-herdr 的 Agent 由 Primary Agent 创建，并在独立 herdr tab 的受管 pane 中运行交互式 pi。Agent 使用全新、正常落盘的 session；一次请求完成后进入 idle，保留上下文并等待后续消息。
 
-创建关系只记录 `createdBy`，不形成 Team 或可见性边界。Agent 默认与创建者使用同一 workspace 和工作目录；只有显式指定 `isolation: "worktree"` 时才创建隔离 worktree。
+这里的持久性以 live runtime 为边界：只要 pane 仍存在，Agent 就能跨多轮复用。pane、tab 或进程消失后，pi-herdr 释放内存记录与名额，不再自动恢复该 Agent；session 与可选 worktree 保留给用户通过原生 pi、Git 和 herdr 管理。
 
-## Agent 工具
+## Agent
 
-Primary Agent 使用 `Agent` 创建新的持久后台 Agent：
+Primary Agent 使用 `Agent` 创建后台 Agent：
 
 ```typescript
 Agent({
@@ -16,104 +16,108 @@ Agent({
   name: string,
   model?: string | string[],
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
-  max_turns?: number,
-  isolated?: boolean,
-  inherit_context?: boolean,
   isolation?: "worktree",
-})
-```
-
-- `description`：简短描述初始请求，作为 tab 初始标题的一部分。
-- `prompt`：Agent 收到的第一条消息。
-- `agent_type`：角色定义名称，例如 `explorer` 或 `general-purpose`。
-- `name`：同时作为 pi session name、herdr Agent 路由名和 tab label，必须符合 `[a-z][a-z0-9_-]{0,31}`。
-- `model`、`thinking`、`max_turns`：覆盖角色定义的运行配置。
-- `isolated`：只加载允许的内置工作工具，不继承普通扩展和 MCP。
-- `inherit_context`：创建时是否 fork Primary Agent 的当前会话历史；默认 `false`。
-- `isolation: "worktree"`：显式要求独立 worktree；未设置时共享当前 workspace。
-
-创建操作立即返回：
-
-```typescript
-{
+}) => {
   status: "launched",
-  name: string,
   description: string,
-  tabId: string,
-  paneId: string,
+  agent: AgentInfo,
 }
 ```
 
-pi session name 是持久事实来源。herdr 要求 live Agent name 唯一；pi-herdr 进一步要求当前 herdr session 中尚未删除的持久 Agent session name 唯一。即使 runtime 暂时 unavailable，也不能用同名创建另一个 Agent。
+- `description` 是工具结果与 UI 详情中的简短说明，不参与 tab label。
+- `prompt` 是第一条消息，使用与 `SendMessage` 相同的 `<from ...>` envelope。
+- `agent_type` 是创建时解析并固定的 definition 名称。
+- `name` 同时作为 pi session name、herdr live route name 和 tab label，必须符合 `[a-z][a-z0-9_-]{0,31}`。
+- `model` 与 `thinking` 覆盖 definition 的初始值；Agent 启动后允许用户使用 pi 原生能力修改。
+- `isolation: "worktree"` 创建独立 worktree workspace；未设置时共享当前 workspace 与 cwd。
 
-创建时，pi-herdr 设置 pi session name，并把同一个值传给 `herdr agent start` 和 tab label。恢复时从 pi session 读取 name，再重新绑定 herdr Agent 和 tab。spawned Agent 中的 `/name` 变更会通过 `session_info_changed` 同步到 herdr 和 tab；新名字格式无效或已经被占用时，扩展恢复原名并给出错误。
+创建过程只有在 `agent.start` 成功且初始 `agent.prompt` 被 herdr 接受后才返回 `launched`，不等待 Agent 完成工作。任一步失败都会回滚本次新建的 pane/tab、尚未承载工作的 session，并以 `force: false` 尝试移除新 worktree；herdr 拒绝移除时保留现场，残留资源进入错误信息。
 
-未知、禁用或无效的 `agent_type` 会直接报错。已有 Agent 的 tab 或 runtime 消失后，supervisor 可以根据持久 session 和 name 恢复它。
+共享 workspace 时，pi-herdr 使用 `tab.create` 返回的 root pane。worktree 模式直接复用 `worktree.create` 返回的 workspace、tab 与 root pane，不创建第二个 tab。
 
-## 发现与复用
+## StopAgent
 
-`ListAgents` 返回 herdr 当前可到达的全部 Agent 和 peer，不按创建者、工作目录或 worktree 过滤。pi-herdr 创建的 Agent 一定有 name；手动启动且没有命名的 peer 只能通过 `pane_id` 寻址。
+Primary Agent 可以停止任意其他 live Agent 或 peer：
 
 ```typescript
-SendMessage({
-  agent: "code-explorer",
-  message: "继续检查刷新令牌的错误处理，并把新增发现回复给我。",
-})
+StopAgent({
+  agent: string,
+}) => {
+  stopped: true,
+  agent: AgentInfo,
+}
 ```
 
-消息发送给空闲 Agent 时会触发新一轮工作；Agent 正在工作时，消息按投递模式进入 steering 或 follow-up 队列。详细语义见 [Messaging](messaging.md)。
+`agent` 接受唯一 live name 或当前 pane ID。pi-herdr 在关闭前取得目标 `AgentInfo`，拒绝目标 pane 等于调用者 pane，然后调用 `pane.close`。StopAgent 不删除 pi session、tab 中的其他 pane 或 worktree，也不负责 Git 合并与资源清理。
 
-## 生命周期
+## 单扩展双模式
+
+Primary 与 Spawned 使用同一个 pi-herdr extension 入口，通过创建时注入的 runtime role 选择工具表面：
+
+- Primary 模式注册 `Agent`、`StopAgent`、`ListAgents`、`SendMessage` 和用户 UI。
+- Spawned 模式只注册 `ListAgents`、`SendMessage` 和 name 同步逻辑。
+
+Spawned 模式不会注册 `Agent` 或 `StopAgent`，因此不能递归创建 Agent 或管理其他 runtime。definition 是否加载其他普通 extensions 与 skills 不改变 pi-herdr 自己的工具表面。
+
+## Name 与 rename
+
+name 在 live Agent 中必须唯一。pi-herdr 不为已经关闭的 session 保留 name；关闭后可以创建同名 Agent。
+
+Spawned 模式监听 `session_info_changed`。用户执行 `/name` 后：
+
+1. 校验新名字格式并通过 herdr 检查 live 唯一性。
+2. 以稳定的 live `pane_id` 调用 `agent.rename`。
+3. 调用 `tab.rename` 保持 tab label 一致。
+4. 任一步失败时，带重入保护地恢复已修改部分和原 pi session name，并显示错误。
+
+Primary 的内存记录以 pane ID 关联 live Agent，name 只是可变路由属性，因此不需要跨进程维护额外 registry。
+
+## Lifecycle
 
 ```text
-created -> starting -> working -> idle
-                           ^         |
-                           |         |
-                           +---------+
+starting -> working -> idle
+                ^       |
+                |       |
+                +-------+
 
 starting/working/idle -> blocked -> working
-starting/working/idle -> unavailable
+starting/working/blocked/idle/done/unknown -> closed
 ```
 
-- `starting`：tab 与受管 pane 已创建，herdr 尚未识别到 pi Agent。
-- `working`：Agent 正在处理消息。
-- `blocked`：Agent 正在等待批准或用户输入。
-- `idle`：本轮工作已经 settle，可以接收下一条消息。
-- `unavailable`：tab、受管 pane、进程或 socket 已不可用；持久 session 仍可用于恢复。
+工具层直接保留 herdr `AgentInfo.agent_status` 的 `idle`、`working`、`blocked`、`done` 和 `unknown`。`/agents` UI 可以把 `done` 视觉归类为 idle，但不会改写工具数据。
 
-herdr 的 `done` 表示后台工作结束后尚未被查看的 idle 状态，不表示 Agent 生命周期结束。pi-herdr 把 herdr 的 `idle` 和 `done` 都归一为 `idle`。
+`ListAgents` 只返回 live runtime，不包含 `unavailable`。Primary 重启后，之前仍 live 的 Agent 因创建者内存已经消失，会作为普通 peer 返回；它们的 session、工具模式和上下文不受影响。
 
-Agent 的身份和 session 默认持久化。本轮结束不会删除 tab、session 或可选 worktree；关闭 Agent tab 只让 runtime unavailable，不删除 session。
+## Capacity Setting
 
-## 数量上限
+每个 Primary 进程只统计自己创建且仍 live 的 Agent。默认上限为 16，可在 Pi settings 中配置：
 
-pi-herdr 不限制同时工作的 Agent 数量。当前 herdr workspace 默认最多存在 16 个由 pi-herdr 创建且尚未移除的 Agent，用于防止错误循环无限创建 tab、session 和模型调用。
+```json
+{
+  "piHerdr": {
+    "maxMembers": 32
+  }
+}
+```
 
-达到 `maxMembers` 后，`Agent` 返回明确错误。调用方可以通过 `ListAgents` 复用已有 Agent，或由用户清理不再需要的 Agent。
+`maxMembers` 接受任意正整数；项目 settings 覆盖全局 settings。非法值会产生配置诊断并阻止新的 `Agent` 创建，但不影响 `ListAgents`、`SendMessage` 或 `StopAgent`。Primary 重启后计数重新开始，多个 Primary 的进程内上限彼此独立。
 
 ## Bundled Agents
 
 ### `explorer`
 
-`explorer` 用于只读代码与资源搜索：
-
-- 适合定位文件、符号、调用关系和资源目录。
-- 提供 `read`、`bash`、`grep`、`find` 和 `ls`，可以使用 `rg`、Git 查询、文件统计等命令辅助搜索和分析。
-- Bash 遵守只读角色约束，不创建、修改或删除文件。
-- 完成当前请求后，通过消息 reply 地址把结论发回请求者。
-- 默认模型偏好为 `gpt-5.6-luna`，其次为 `deepseek-v4-flash`，均不可用时继承创建者模型。
+- 使用 `read`、`bash`、`grep`、`find` 和 `ls`，不加载普通 extensions 或 skills。
+- Bash 只用于读取、Git 查询、统计与分析，不创建、修改或删除文件。
+- 初始模型优先选择 `gpt-5.6-luna`、`deepseek-v4-flash`，均不可用时继承 Primary 模型。
 
 ### `general-purpose`
 
-`general-purpose` 具备完整工作工具：
-
+- 使用全部工作工具，并继承普通 extensions 与 skills。
+- 初始模型继承 Primary 模型。
 - 适合实现、重构、测试、文档和开放式调查。
-- 可以创建和修改文件。
-- 默认继承创建者当前模型。
-- 完成当前请求后，通过消息 reply 地址回复请求者，并继续保持空闲。
 
-两个定义都来自 npm 包中的 Markdown 文件，详见 [Agent definitions](agent-definitions.md)。
+两个定义在创建时加载，详见 [Agent definitions](agent-definitions.md)。
 
-## 用户命令
+## User Command
 
-`/agents` 展示 herdr 当前可到达的全部 Agent、peer、状态、cwd 和 tab，不按创建关系分组或过滤。
+`/agents` 展示 herdr 当前返回的 live Agent/peer、原始状态、cwd、workspace、tab 和 pane。它不提供通用 tab、pane、workspace 或 worktree 管理。

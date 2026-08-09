@@ -1,9 +1,9 @@
 ---
 description: General-purpose implementation and investigation
-tools: all
+tools:
+  - all
 extensions: true
 skills: true
-inherit_context: false
 enabled: true
 ---
 

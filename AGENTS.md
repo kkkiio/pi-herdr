@@ -36,13 +36,13 @@ pi-herdr 当前处于架构与文档阶段。实现代码尚未开始；`docs/` 
 - **Primary Agent** — 调用 `Agent` 工具创建另一个持久 Agent 的 pi 会话。
 - **Spawned Agent** — 由 pi-herdr 创建、拥有独立 tab 和持久 pi session 的后台 Agent。 _Avoid_: one-shot subagent, team member.
 - **Agent definition** — `agents/*.md` 或用户覆盖路径中的角色配置与 prompt。
-- **Agent name** — 同时用作 pi session name、herdr live Agent alias 和 tab label 的稳定名称。
+- **Agent name** — 同时用作 pi session name、herdr live Agent alias 和 tab label；live 时可通过 `/name` 同步修改。
 - **Agent tab** — 一个 spawned Agent 在 herdr 中的用户可见容器。
 - **Managed pane** — Agent tab 内实际运行 pi 进程、承载 herdr lifecycle state 的 pane。
 - **Peer** — herdr 当前可达、但不是由本次 pi-herdr runtime 管理的其他 pi 会话。
-- **createdBy** — 记录哪个 Primary Agent 创建了 spawned Agent 的元数据，不是可见性或通信边界。
-- **Reply address** — 入站消息携带的 `SendMessage` 返回地址。
-- **Persistent session** — 正常落盘、在 Agent 空闲或 runtime 重建后继续使用的 pi session。
+- **createdBy** — 当前 Primary 进程为自己创建的 live Agent 附加的内存元数据，不是持久身份或通信边界。
+- **Reply address** — 入站消息携带的 live `SendMessage` 返回地址，可能在 rename、pane 变化或关闭后失效。
+- **Persistent session** — 正常落盘、在 Agent idle 时继续使用，并可由用户通过原生 pi 管理的 session。
 
 ## Policies & Mandatory Rules
 
@@ -53,30 +53,38 @@ When responding to users or writing project prose without an explicit language r
 When changing Agent lifecycle, spawning, or herdr integration:
 
 - Keep every spawned Agent background-only and session-persistent.
-- Create one herdr tab per Agent; run pi in that tab's managed pane.
+- Create one herdr tab per Agent; run pi in that tab's managed pane. Reuse the tab/root pane returned by `worktree.create`.
 - Share the creator's workspace and cwd by default; create a worktree only for explicit `isolation: "worktree"`.
-- Treat herdr `idle` and `done` as idle activity states, not Agent termination.
-- Do not add active/running concurrency limits; keep only the workspace-wide `maxMembers` safety limit.
+- Keep herdr `AgentInfo` and `agent_status` unchanged in tool results; UI may visually group `done` with idle.
+- Treat pane/tab/process disappearance as the end of pi-herdr management. Preserve session/worktree, but do not add offline registry, mailbox or automatic recovery.
+- Do not add active/running concurrency limits. Enforce only the current Primary process's `piHerdr.maxMembers` safety limit.
+- Return `Agent` success only after `agent.start` and the initial `agent.prompt` succeed; roll back resources created by a failed launch.
 
 When changing discovery or messaging:
 
-- Return every Agent and peer visible through the current herdr session; do not scope `ListAgents` by `createdBy`, cwd, workspace, or a Team abstraction.
+- Return every live Agent and peer visible through the current herdr session; never synthesize unavailable/offline entries.
 - Use the unique Agent name as the preferred target and the live `pane_id` as fallback.
-- Route work requests and results through `SendMessage` and reply addresses.
-- Expose `ListAgents` and `SendMessage` to spawned Agents, but do not expose `Agent` or arbitrary pane management.
+- Route initial work, follow-up requests and results through herdr `agent.prompt` using the opening `<from agent="…" reply-to="…">` envelope. Do not add `steer`/`followUp` emulation or durable delivery.
+- Load the same pi-herdr extension in Primary and Spawned runtime roles. Spawned mode registers `ListAgents` and `SendMessage`, but not `Agent` or `StopAgent`.
+- Keep `StopAgent` limited to `pane.close`, accept live name or pane ID, reject self-stop, and never delete session/worktree.
+- Retry idempotent reads only; never automatically replay mutating herdr RPC.
 
 When changing Agent naming:
 
 - Use pi session name as the persisted source of truth.
-- Enforce herdr's `[a-z][a-z0-9_-]{0,31}` format and current-session uniqueness for spawned Agent session names.
+- Enforce herdr's `[a-z][a-z0-9_-]{0,31}` format and live uniqueness for spawned Agent session names. Closed sessions do not reserve names.
 - Synchronize valid `session_info_changed` events to herdr Agent name and tab label.
-- Restore the prior session name and report an error when a rename is invalid or conflicts.
+- Use pane ID as the live internal key. Restore every partially changed name surface and report an error when rename validation or synchronization fails.
 
 ### Bundled Definitions
 
 When changing `agents/explorer.md`, keep Bash available for `rg`, Git queries, statistics, and file analysis while retaining the read-only role contract.
 
 When changing `agents/*.md` or the definition loader, keep lifecycle and messaging rules in the shared Agent system prompt; keep role-specific expertise in each Markdown body.
+
+Keep definition collections as YAML arrays. The supported fields are exactly `description`, `model`, `thinking`, `tools`, `extensions`, `skills`, `disallowed_tools`, and `enabled`; reject every unknown field.
+
+Resolve project definitions from the current Git worktree root, or current cwd outside Git. Use `.pi/agents`, then `.agents/agents`, then the global directory, then bundled definitions. Treat a malformed selected definition as an error instead of falling back.
 
 When adding npm packaging, include both `dist/` and `agents/` in `package.json#files`, resolve bundled files from `import.meta.url`, and verify the tarball contains both Markdown definitions.
 
@@ -86,7 +94,7 @@ When changing a Proposed design before implementation, make the direct migration
 
 ### Documentation Intent Principle
 
-When implementation disagrees with a Proposed ADR because a platform API behaves differently, update the ADR and user documentation in the same change. Keep `README.md` limited to getting started; put API detail in `docs/` and developer rules here.
+When implementation disagrees with a Proposed ADR because a platform API behaves differently, update the ADR and user documentation in the same change. Keep detailed lifecycle and error semantics in `docs/`; keep README focused on getting started plus the user-facing herdr RPC support matrix.
 
 ### Code Design
 

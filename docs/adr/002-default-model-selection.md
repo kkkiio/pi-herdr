@@ -1,23 +1,19 @@
-# ADR-002: Agent Default Model Selection
+# ADR-002: Agent Initial Model Selection
 
 - 状态：提议（Proposed）
 - 日期：2026-08-09
 
-## 上下文
+## Context
 
-持久 Explorer 会在长任务中被多次复用。如果它始终继承创建者的昂贵模型，简单的只读搜索也可能持续产生不必要成本；General Purpose Agent 则通常需要与创建者相近的能力。
+长期 live Explorer 会被多次复用。如果它总是以 Primary 的高成本模型启动，简单只读搜索可能产生不必要成本；General Purpose Agent 通常更适合继承 Primary 能力。
 
-Agent definition 的 `model` 需要同时支持固定模型和有序偏好列表，并允许创建 Agent 时覆盖。
+模型配置只需要决定新 session 的初始状态。Agent 启动后，用户仍应保留 pi 原生 `/model` 等控制能力，而不是由 pi-herdr 锁定模型。
 
-## 决策
+## Decision
 
 ### 1. `model` 支持字符串和数组
 
-```yaml
-model: deepseek/deepseek-v4-flash
-```
-
-或：
+Definition 与 `Agent({ model })` 都接受固定模型或有序候选列表：
 
 ```yaml
 model:
@@ -25,64 +21,57 @@ model:
   - deepseek-v4-flash
 ```
 
-数组按顺序选择第一个可用模型；全部不可用或未设置时继承 Primary Agent 当前模型。
+数组按顺序选择第一个当前可用候选。
 
-### 2. Explorer 默认模型
+### 2. Explorer 与 General Purpose 默认值
 
-Bundled `agents/explorer.md` 定义以下偏好：
+Bundled explorer 优先使用 `gpt-5.6-luna`，其次使用 `deepseek-v4-flash`。Definition 候选均不可用时继承 Primary 当前模型。
 
-```yaml
-model:
-  - gpt-5.6-luna
-  - deepseek-v4-flash
-```
+Bundled general-purpose 不指定 model，因此初始模型直接继承 Primary 当前模型。
 
-### 3. General Purpose 默认模型
+### 3. Selection precedence
 
-Bundled `agents/general-purpose.md` 不设置 `model`，因此继承 Primary Agent 当前模型。用户可通过自定义 definition 或 `Agent({ model })` 覆盖。
-
-### 4. 选择优先级
-
-1. `Agent({ model })` 单次覆盖。
-2. 项目、工作区或全局自定义 definition。
+1. `Agent({ model })` 显式参数。
+2. 当前 root 中选中的自定义 definition。
 3. bundled definition。
-4. Primary Agent 当前模型。
+4. Primary 当前模型。
 
-模型在 Agent 创建时解析并固定。后续 `SendMessage` 复用同一个 Agent 和模型；需要不同模型时应创建另一个具名 Agent，而不是静默切换现有 session 的模型。
+Definition 在创建时固定；已有 Agent 不因 Markdown 文件变化而重新解析模型。
 
-### 5. 可用模型
+### 4. Availability
 
-候选模型必须：
+候选模型必须已经认证、存在于 pi model registry，并符合当前 session 的 scoped/enabled models。候选按 model ID 匹配，把 `.` 与 `-` 视为等价；多个 provider 命中时使用 registry 顺序中的第一个可用项。
 
-- 存在于 pi model registry 且用户已经完成认证。
-- 如果配置了 `enabledModels`，同时位于该白名单中。
+显式 `Agent({ model })` 表达调用方确定意图，因此其候选全部不可用时创建失败。Definition 的默认候选只是偏好，其候选全部不可用时静默继承 Primary 模型。
 
-候选项按 model ID 匹配，不绑定 provider，并把 `.` 与 `-` 视为等价。多个 provider 命中时使用 registry 返回的第一个可用项。
+### 5. Model is mutable after launch
 
-候选列表全部不可用时继承 Primary 模型，不产生额外 warning 消息。
+解析结果只用于启动新 pi session。用户之后执行 `/model`、修改 thinking level 或使用其他 pi 原生控制时，变化正常持久化到 session，后续 `SendMessage` 沿用当前 session 状态。
 
-## 备选方案
+pi-herdr 不监听或回滚模型变化，也不要求为不同模型创建新 Agent。
 
-| 方案 | 未采纳原因 |
+## Alternatives
+
+| Alternative | Why not chosen |
 | --- | --- |
-| 所有 Agent 继承创建者模型 | 长期 Explorer 会持续消耗不必要的高价模型 token |
-| 固定 provider/model | 用户未必安装、启用或认证该 provider |
-| 自动按能力标签选择 | pi registry 没有稳定且统一的成本/能力标签 |
-| 每条消息重新选择模型 | 同一持久 session 中静默切换模型会让行为和成本难以预测 |
+| 所有 Agent 继承 Primary 模型 | Explorer 会持续消耗不必要的高价模型 token |
+| 固定 provider/model | 用户未必安装、启用或认证对应 provider |
+| 显式 model 失败时静默回退 | 会掩盖调用参数拼写错误或违反调用方明确意图 |
+| 创建后锁定模型 | 限制 pi 原生交互能力，并需要额外拦截与回滚逻辑 |
 
-## 后果
+## Consequences
 
-### 正面
+### Positive
 
 - Explorer 默认节省成本，General Purpose 默认保持能力。
-- 模型选择写在 Markdown definition 中，可随包发布并被用户覆盖。
-- 持久 Agent 的模型身份稳定，便于调用方判断是否复用。
+- 显式调用错误可立即发现，definition 偏好仍能平滑回退。
+- live Agent 与普通 pi session 一样可由用户调整模型。
 
-### 负面
+### Negative
 
-- `model` 需要解析字符串和数组两种格式。
-- 想更换模型时需要创建新 Agent 或显式重建旧 Agent。
+- Agent 的当前模型可能与创建时返回的初始选择不同。
+- model string/string[] 和 scoped model 匹配需要严格诊断。
 
-### 未解决
+### Unresolved
 
 - 无。

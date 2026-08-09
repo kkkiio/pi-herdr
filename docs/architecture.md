@@ -1,123 +1,114 @@
 # Architecture
 
-pi-herdr 把 Agent 建模为 herdr workspace 中可长期复用的独立 pi session。某个 Primary Agent 负责创建它，但创建关系不形成 Team、通信边界或默认 worktree 隔离。
-
-## Runtime Structure
+pi-herdr 是 herdr live session 上的轻量 Agent 协作层。Primary 创建后台 Agent，每个 Agent 使用独立 tab、受管 pane 和正常落盘的全新 pi session；通信、发现和状态都以当前 socket 可见的 runtime 为边界。
 
 ```text
-Herdr workspace
+Herdr live session
 ├── Tab: primary
-│   └── Pane: Primary pi session + pi-herdr supervisor
+│   └── Primary pi + pi-herdr extension (Primary mode)
 ├── Tab: code-explorer
-│   └── Managed pane
-│       ├── createdBy: Primary
-│       ├── shared workspace and cwd
-│       ├── persistent pi session
-│       └── agent extension
+│   └── Managed pane: pi + same extension (Spawned mode)
 ├── Tab: implementer
-│   └── Managed pane
-│       ├── createdBy: Primary
-│       ├── persistent pi session
-│       └── agent extension
-└── Other tabs and reachable pi peers
+│   └── Managed pane: pi + same extension (Spawned mode)
+└── Other live pi peers
 ```
 
-一个长期 Agent 对应一个 herdr tab。tab 是用户看到、命名、聚焦和关闭的容器；tab 内的受管 pane 才是 pi 进程和 herdr Agent 状态的实际 endpoint。Agent 创建时 tab 只有一个受管 pane，用户之后在该 tab 中创建的其他 pane 不属于 Agent runtime。
+一个 Agent 创建时对应一个 tab 和一个受管 pane。用户之后在 tab 中创建的其他 pane 不属于 Agent runtime；`StopAgent` 只关闭目标 Agent pane，不连带关闭其他 pane。
 
-Agent definition 只是角色模板。pi session name 是逻辑 Agent 的持久身份；运行时把它同步为 herdr Agent name 和 tab label。tab ID、pane ID、进程、cwd 和可选 worktree 是 runtime 信息。`createdBy` 用于追踪创建来源、恢复和管理权限，不用于决定 `ListAgents` 的可见范围。
+## Scope Boundary
 
-pi session name 原生写入 session JSONL，并通过 `session_info_changed` 通知扩展。herdr 要求 name 在 live agents 中唯一，并用 name 或宿主 `pane_id` 解析所有 Agent 命令。pi-herdr 把 herdr 的格式与唯一性要求应用到 spawned Agent 的 pi session name，避免恢复时撞名。
+pi-herdr 持久化的是普通 pi session，不持久化自己的 Agent registry。只要 runtime live，Agent 可以反复接收消息并保留上下文；runtime 消失后：
+
+- 当前 Primary 删除内存记录并释放名额。
+- pi session 与可选 worktree 保留。
+- `ListAgents` 不再返回该 Agent，`SendMessage` 也不会自动恢复它。
+- 用户可以使用原生 pi、Git 与 herdr 继续管理资源。
+
+因此系统不需要 durable mailbox、offline name reservation、session-to-pane registry、leader election 或跨 Primary 的共享锁。
 
 ## Components
 
-建议实现保持少量深模块：
+实现保持少量深模块：
 
 ```text
 src/
 ├── index.ts
 ├── agent-supervisor.ts
-├── agent-registry.ts
 ├── agent-runtime.ts
-├── agent-extension.ts
 ├── agent-definitions.ts
 ├── herdr-client.ts
 ├── tools.ts
 └── ui.ts
 ```
 
-- `index.ts`：扩展入口，只负责装配模块和注册生命周期。
-- `agent-supervisor.ts`：创建、查找、恢复和停止 Agent，对外隐藏 tab、pane 与 session 时序。
-- `agent-registry.ts`：以 pi session reference 为键持久化 `createdBy`、tab/pane runtime 引用和待投递消息；name 直接从 pi session 读取。
-- `agent-runtime.ts`：启动或恢复 pi session，并向交互式 Agent 投递 prompt。
-- `agent-extension.ts`：为被创建的 Agent 提供受限消息能力，并报告 session identity。
-- `agent-definitions.ts`：发现、解析和合并 Markdown definition。
-- `herdr-client.ts`：封装 socket RPC、事件订阅、重连和状态 reconciliation。
-- `tools.ts`：注册 Primary 与 spawned Agent 各自可见的工具。
-- `ui.ts`：widget、通知和 `/agents` 命令。
+- `index.ts`：读取 runtime role、环境与设置，装配同一个 extension 的 Primary/Spawned 工具表面。
+- `agent-supervisor.ts`：管理当前 Primary 创建的 live Agent 内存记录、容量、事件和创建回滚。
+- `agent-runtime.ts`：构造 pi 启动参数、system prompt、消息 envelope 与 rename 同步。
+- `agent-definitions.ts`：严格发现、解析并固定 Markdown definition。
+- `herdr-client.ts`：类型化 socket RPC、事件订阅、只读重试和 live snapshot reconciliation。
+- `tools.ts`：实现 `Agent`、`StopAgent`、`ListAgents` 与 `SendMessage`。
+- `ui.ts`：`/agents`、状态与配置诊断。
 
-## Persistence
+没有独立的 `agent-registry` 或第二个 agent extension。Primary/Spawned 是同一 extension 入口的两种 runtime role。
 
-每个 Agent 使用普通持久 pi session。pi-herdr 另外保存一个 herdr session 范围的 registry：
+## In-memory Ownership
 
-```text
-Herdr session
-└── agents
-    └── pi session reference
-        ├── createdBy
-        ├── definition name
-        ├── pi session reference
-        ├── current tab/pane/workspace/cwd
-        ├── optional worktree provenance
-        └── lifecycle state
-```
+Primary 以 live `pane_id` 为键记录自己成功创建的 Agent，值包含 description、definition、createdBy、tab/workspace/worktree 引用和当前 name。记录只用于：
 
-Registry 不保存“任务结果”。Agent 的工作结论直接作为消息发送；只有暂时无法投递给持久 Agent 的消息需要等待 runtime 恢复。
+- 给 `ListAgents` 结果附加 `type: "agent"` 与 `createdBy`。
+- 统计当前 Primary 的 `maxMembers`。
+- 关联 rename、pane/tab close 与创建失败回滚。
 
-Supervisor 启动或 socket 重连时：
+socket 重连后，supervisor 通过 `session.snapshot` / `agent.list` 删除已经不 live 的本地记录并刷新仍存在的 runtime 引用。它不会从 session 文件重建丢失记录；Primary 重启后，已有 live 会话自然作为 peer 返回。
 
-1. 读取当前 herdr session 的 Agent registry。
-2. 调用 herdr `agent.list` / `agent.get` 查询全部可达 runtime。
-3. 从 pi session 读取 name，并将受管 pane 与 session reference 关联。
-4. 已存在的 tab/pane 重新 attach；缺失的 runtime 标记为 `unavailable`。
-5. 下一次向 unavailable Agent 发消息时，用原 session 创建新 tab 和 pane，并把 pi session name 重新绑定为 herdr name 与 tab label。
+## Creation Transaction
 
-## Discovery
+共享 workspace 创建流程：
 
-`ListAgents` 返回 herdr 当前可到达的全部 Agent 和 peer，并从 registry 补充 runtime 暂时 unavailable 的持久 Agent。Registry 同时提供 `createdBy` 和 session 信息；name 来自 pi session 与 herdr live alias，不按创建关系或 workspace 过滤结果。
+1. 校验环境、设置、definition、name 和初始模型。
+2. 检查当前 Primary 的 live Agent 数量。
+3. `tab.create` 创建不抢焦点的 name tab，并取得 root pane。
+4. `agent.start` 启动全新持久 pi session、同一个 extension 的 Spawned role 及 definition 配置。
+5. `agent.prompt` 投递带 `<from ...>` envelope 的初始请求。
+6. 只有 prompt 被 herdr 接受后才写入内存记录并返回 `launched`。
 
-工作目录和 worktree 只作为列表元数据，帮助调用方选择合适的 Agent。
+Worktree 流程用 `worktree.create` 替换第 3 步，直接复用其返回的 workspace、tab 和 root pane。
 
-## Runtime State
-
-herdr 状态来自 tab 内的受管 pane，描述当前 Agent 活动，不代表逻辑 Agent 生命周期：
-
-| herdr 状态 | pi-herdr 状态 | 处理方式 |
-| --- | --- | --- |
-| `working` | `working` | Agent 正在处理消息 |
-| `blocked` | `blocked` | 等待批准或输入 |
-| `idle` | `idle` | 可接收下一条消息 |
-| `done` | `idle` | 后台工作已 settle、尚未被查看 |
-| `unknown` | 保留最近状态或 `unavailable` | 不能据此判断成功 |
-
-Supervisor 通过 socket 事件订阅更新状态，并在重连后主动 reconciliation。它不把一次 `agent.wait` 返回解释为 Agent 退出。
+失败时按已完成步骤逆序回滚：关闭新 pane/tab、删除尚未承载工作的 session，并以 `force: false` 移除本次新建的 worktree。Herdr 拒绝安全移除时保留现场；mutating RPC 不自动重放，清理失败与残留路径合并进最终错误。
 
 ## Messaging
 
-所有请求和结果都走同一个消息模型：
+所有初始请求、后续工作和结果都通过 herdr `agent.prompt` 传递：
 
 ```text
-sender -- SendMessage --> any reachable Agent or peer
-       <-- reply -------
+<from agent="sender-name" reply-to="w1:p1">
+message body
 ```
 
-消息 envelope 包含 sender、reply 地址和 delivery mode。接收方不需要访问发送方 session 或 transcript。
+pi-herdr 不使用目标进程内的跨进程 `pi.sendMessage` 假设，也不使用 `pane.send_text`、send-keys 或轮询模拟 delivery mode。目标必须 live；提交成功只表示 herdr 接受 prompt，不表示工作已经完成。
 
-## Worktrees
+## Name Synchronization
 
-Agent 默认在创建者当前 workspace 中建立新 tab，并继承 cwd，不创建 worktree。只有 `Agent({ isolation: "worktree" })` 才先创建独立 worktree workspace，再在其中建立 Agent tab；该 worktree 在 Agent 空闲后继续保留。
+pi session name 是持久显示名，herdr Agent name 是 live route，tab label 是 UI 名称。三者在 spawned runtime live 时保持一致。
 
-关闭 runtime 时保留 session。移除带 worktree 的 Agent 时，如果存在未提交或未合并变更，操作必须保留现场并向用户说明。
+Spawned 模式以自己的 pane ID 调用 herdr。`session_info_changed` 后先验证格式与 live 唯一性，再调用 `agent.rename` 和 `tab.rename`；失败时恢复已变更的 herdr 状态和 pi session name。重入 guard 防止恢复动作重复触发同步。
 
-## Safety Limit
+## Runtime State and Events
 
-系统不设置 active/running 并发限制。当前 herdr workspace 默认最多保留 16 个由 pi-herdr 创建的 Agent，防止循环 spawn 造成大量 tab、session 和模型调用。普通 peer 不计入这个上限。
+工具返回 herdr 原始 `AgentInfo` 与 `agent_status`。Supervisor 订阅实际的下划线事件名，包括 `pane_agent_detected`、`pane_agent_status_changed`、`pane_closed`、`pane_exited`、`tab_closed` 和 `tab_renamed`。
+
+事件只维护 live 内存与 UI，不把 `done` 解释为 Agent 终止，也不把 `unknown` 改写为 idle。`/agents` 可以在展示层把 `done` 归入 idle 视觉分组。
+
+## Capacity and Settings
+
+`piHerdr.maxMembers` 默认 16，接受任意正整数。项目 Pi settings 覆盖全局 settings。这个上限只统计当前 Primary 进程创建且仍 live 的 Agent，用于阻止单个 Primary 的错误循环；它不是 workspace-wide 或 herdr session-wide 配额。
+
+非法设置阻止新的 Agent 创建，但不关闭已有 runtime，也不影响 discovery、messaging 或 StopAgent。
+
+## Socket Failure Policy
+
+- `HERDR_ENV != 1`：extension 静默禁用控制面。
+- 已在 herdr 环境但缺少 `HERDR_SOCKET_PATH` 或协议不兼容：显示明确诊断，不猜测 socket。
+- 断线后重连并恢复事件订阅。
+- 只自动重试 `agent.list`、`agent.get`、snapshot 等幂等读取。
+- `agent.start`、`agent.prompt`、rename、close 和 worktree mutation 不自动重放。

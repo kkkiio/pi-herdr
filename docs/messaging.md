@@ -1,40 +1,29 @@
 # Agent Messaging
 
-pi-herdr 使用消息连接 herdr 中可到达的 pi 会话。消息传递请求和结论，不复制发送方的会话历史，也不要求双方属于同一个 Team、工作目录或 worktree。
-
-每条入站消息都包含发送者身份和 reply 地址。收到请求的 Agent 使用 reply 地址回复，不假设消息一定来自创建自己的 Primary Agent。
+pi-herdr 通过 herdr `agent.prompt` 在 live pi 会话之间传递纯文本请求和结论。消息不复制发送方 transcript，不建立 Team，也不承诺目标 runtime 消失后的排队或恢复。
 
 ## ListAgents
 
-`ListAgents` 以当前 herdr session 为范围：返回 herdr 当前可达的全部 Agent 和 peer，并补充 pi-herdr 管理但 runtime 暂时 unavailable 的持久 Agent。它不按创建者或 workspace 过滤。
+`ListAgents` 直接返回当前 herdr socket 可见的 live `AgentInfo`，并附加当前 Primary 能确认的来源信息：
 
 ```typescript
 ListAgents() => {
-  agents: [
-    {
-      name?: string,
+  agents: Array<
+    AgentInfo & {
       type: "agent" | "peer",
       createdBy?: string,
-      cwd?: string,
-      workspace_id: string,
-      tab_id: string,
-      pane_id: string,
-      status: "starting" | "working" | "blocked" | "idle" | "unavailable",
-    },
-  ],
+    }
+  >,
 }
 ```
 
-- `agent`：由 pi-herdr 的 `Agent` 工具创建，拥有持久 session。
-- `peer`：herdr 中可到达的其他 pi 会话。
-- `createdBy` 只是创建来源元数据，不用于过滤列表或限制通信。
-- pi-herdr 创建的 Agent 始终有 name；它同时是 pi session name 和 herdr live alias，符合 `[a-z][a-z0-9_-]{0,31}`，并在当前 herdr session 中保持唯一。
-- 手动启动的 peer 可以没有 name，此时使用 `pane_id` 寻址。
-- `pane_id` 是 runtime fallback，可能在 pane 跨 workspace 移动或 session 恢复后变化。
-- `tab_id` 用于 UI 定位，不是 Agent 路由身份。
-- `cwd`、workspace、tab 和 pane 都不构成通信边界。
+- herdr `AgentInfo` 原始字段与状态不改写，包括 `workspace_id`、`tab_id`、`pane_id`、`agent_status: "idle" | "working" | "blocked" | "done" | "unknown"`。
+- `type: "agent"` 只用于当前 Primary 进程内创建且仍 live 的 Agent；其余会话返回 `peer`。
+- `createdBy` 使用创建者当前 live name；没有可用 name 时使用创建者 pane ID。
+- Primary 重启会清空创建者内存，原 Agent 即使仍 live，也会作为 peer 返回。
+- name 是首选 target；未命名 peer 使用 `pane_id`。
 
-实现以 herdr `agent.list` 的可达结果为基础，再用 pi-herdr registry 补充 `createdBy` 和持久 session 信息。
+ListAgents 不读取 pi session 文件，不返回已经关闭的 runtime，也不维护 offline registry。
 
 ## SendMessage
 
@@ -42,30 +31,33 @@ ListAgents() => {
 SendMessage({
   agent: string,
   message: string,
-  delivery?: "steer" | "followUp",
 }) => {
-  delivered: boolean,
+  delivered: true,
+  agent: AgentInfo,
 }
 ```
 
-- `agent` 接受唯一 live name，或当前宿主 `pane_id`。
-- `message` 是接收方真正看到的文本。
-- `steer` 尽快影响正在进行的工作；目标空闲时立即触发新 turn。
-- `followUp` 等当前工作 settle 后再交付；目标空闲时同样立即触发新 turn。
-- 未指定 `delivery` 时默认使用 `followUp`，避免普通补充消息打断正在执行的工具链。
+`agent` 接受唯一 live name 或当前 pane ID。实现先通过 herdr 解析目标，再调用 `agent.prompt`；成功时返回 herdr 的目标 `AgentInfo`。目标不存在、runtime 不可用或 prompt 提交失败时，工具直接报错。
 
-普通工作结果也通过 `SendMessage` 返回。pi-herdr 不提供单独的 result store 或结果消费协议。
+SendMessage 不提供 `steer` / `followUp` 参数。消息在目标 pi 中的实际输入时序遵循当前 herdr/pi 的原生 `agent.prompt` 行为，pi-herdr 不使用 send-keys 或终端输入路径模拟额外 delivery mode。
 
-## Reply
+## Envelope and Reply
 
-消息进入接收方时，系统附加路由信息。发送方有唯一 live herdr name 时使用 name；没有时使用当前 `pane_id`：
+初始 Agent prompt 和每次 SendMessage 都使用同一个没有 closing tag 的文本 envelope：
 
 ```text
-From: primary
-Reply-To: w1:p1
+<from agent="primary" reply-to="w1:p1">
+这里开始全部是消息正文，直到本次 prompt 结束。
 ```
 
-Agent 完成请求后直接回复：
+- `agent` 是发送方当前 live name；没有 name 时使用发送方 pane ID。
+- `reply-to` 使用发送时可用的 live name，否则使用 pane ID。
+- attribute 值进行 XML 转义；消息正文不解析、不改写。
+- opening tag 只标识后续文本的来源和回复目标，不执行 slash command，也不携带权限。
+
+reply address 是 live 地址。发送方关闭、移动到新 pane 或更名后，旧 reply 地址可能失效；接收方可以重新调用 `ListAgents` 查找当前目标。pi-herdr 不维护稳定的 offline reply identity。
+
+Agent 完成工作后按 system prompt 使用 `SendMessage` 回复：
 
 ```typescript
 SendMessage({
@@ -74,31 +66,14 @@ SendMessage({
 })
 ```
 
-reply 地址只负责路由，不携带发送方的上下文、权限或工具能力。普通 Primary/peer 的 pi session name 可以包含空格等字符，因此不会自动成为 herdr name；只有 pi-herdr 创建的 Agent 强制让两者一致。
+结果没有独立 store、消费协议或完成通知抑制。一次回复是否成功只取决于 reply target 当时是否 live。
 
-## 投递到 pi 会话
+## Delivery and Failures
 
-接收方进程内的扩展使用 pi 的消息注入能力：
+- 不实现 durable mailbox、message ID、ack、去重或 offline queue。
+- 不读取目标 session 最后一条 assistant 消息来推断结果。
+- 不自动恢复已经关闭的 Agent。
+- socket 断线时只自动重试 `agent.list`、`agent.get` 等幂等读取。
+- `agent.prompt`、`agent.start`、rename、close 等 mutating RPC 不自动重放，避免重复提交或重复操作。
 
-```typescript
-pi.sendMessage(
-  {
-    customType: "agent_message",
-    content: formattedMessage,
-    details: { senderId, senderName, replyTo },
-  },
-  { deliverAs: "followUp", triggerTurn: true },
-)
-```
-
-- 接收方空闲时，消息立即触发新 turn。
-- 接收方工作中时，消息在当前工作结束后交付。
-- 消息不需要轮询。
-
-如果目标 runtime 暂时不可用，pi-herdr 创建的 Agent 可以通过持久 session 恢复后再接收消息。普通 peer 不受 pi-herdr 管理，投递失败会直接返回错误。
-
-## Agent 权限
-
-pi-herdr 创建的 Agent 始终获得 `ListAgents` 和 `SendMessage`，即使 definition 限制了其他工具。它们不会获得 `Agent` 或任意 pane 管理能力，因此可以直接协作，但不能递归创建下级 Agent。
-
-消息不能提升接收方权限，不能代替用户批准，也不能执行 slash command。
+消息不会提升接收方权限，也不能代替用户批准。Spawned 模式始终拥有 `ListAgents` 和 `SendMessage`，但不拥有 `Agent` 或 `StopAgent`。
