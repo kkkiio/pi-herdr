@@ -1,6 +1,6 @@
 # ADR-003: Agent Definitions and Single-extension Roles
 
-- 状态：提议（Proposed）
+- 状态：已接受（Accepted）
 - 日期：2026-08-09
 
 ## Context
@@ -15,11 +15,11 @@ Primary 与 Spawned 需要不同工具表面，但它们属于同一个 npm exte
 
 Bundled definitions 位于 npm 包的 `agents/` 目录，由 YAML frontmatter 和 Markdown body 组成。Body 追加到公共 Spawned system prompt，不替换 identity、reply、live lifecycle 和禁止递归 spawn 等控制面规则。
 
-运行时通过 `import.meta.url` 定位 bundled 资源。未来 `package.json#files` 同时包含 `dist` 与 `agents`，发布检查断言两份 Markdown 进入 tarball。
+运行时通过 `import.meta.url` 定位 bundled 资源。`package.json#files` 同时包含 `dist` 与 `agents`，`npm run verify:package` 断言编译产物与两份 Markdown 都进入 tarball。
 
 ### 2. Root and precedence
 
-在 Git worktree 中，definition root 是 Primary 创建时的 Git top-level；非 Git 环境使用当前 cwd。优先级为：
+以 Primary 当前 Pi session 的 `ExtensionContext.cwd` 为检测起点：在 Git worktree 中，definition root 是该 cwd 的 Git top-level；非 Git 环境直接使用该 cwd。恢复其他项目的 session 时不读取 Node 进程 cwd。优先级为：
 
 1. `<root>/.pi/agents/<name>.md`
 2. `<root>/.agents/agents/<name>.md`
@@ -32,18 +32,18 @@ Bundled definitions 位于 npm 包的 `agents/` 目录，由 YAML frontmatter �
 
 支持字段只有：
 
-| Field | Type |
-| --- | --- |
-| `description` | string |
-| `model` | string / string[] |
-| `thinking` | valid thinking string |
-| `tools` | string[] |
-| `extensions` | boolean / string[] |
-| `skills` | boolean / string[] |
-| `disallowed_tools` | string[] |
-| `enabled` | boolean |
+| Field              | Type                                                            |
+| ------------------ | --------------------------------------------------------------- |
+| `description`      | string                                                          |
+| `model`            | string / string[]                                               |
+| `thinking`         | `off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max` |
+| `tools`            | string[]                                                        |
+| `extensions`       | boolean / string[]                                              |
+| `skills`           | boolean / string[]                                              |
+| `disallowed_tools` | string[]                                                        |
+| `enabled`          | boolean                                                         |
 
-集合不接受 CSV。Extension/skill 数组中的相对路径以当前 definition 文件目录为基准。
+集合不接受 CSV。`model` 数组不能为空，`tools` 中的 `all` 只能单独出现。空 `tools` 数组只保留 Spawned 控制工具；空 extension/skill 数组关闭原生发现且不显式加载资源。Extension/skill 数组中的相对路径以当前 definition 文件目录为基准。
 
 未知字段、非法类型、非法值或同层级大小写重名会使当前选中的 definition 不可用并产生明确诊断，不回退低优先级同名文件。
 
@@ -51,7 +51,7 @@ Frontmatter 是封闭 schema，表格之外的字段全部报错。Agent 始终�
 
 ### 4. One extension, two runtime roles
 
-Primary 与 Spawned 显式加载同一个 pi-herdr extension。创建 Agent 时通过 extension flag/启动参数注入 Spawned role：
+Primary 与 Spawned 显式加载同一个 pi-herdr extension。创建 Agent 时通过 `agent.start.args` 中的 Pi flag `--pi-herdr-role spawned` 注入 Spawned role；`worktree.create` 没有 env 参数，不承担 role 传递：
 
 - Primary 注册 `Agent`、`StopAgent`、`ListAgents`、`SendMessage` 与 UI。
 - Spawned 只注册 `ListAgents`、`SendMessage` 与 name 同步。
@@ -68,13 +68,13 @@ General Purpose 使用 `tools: [all]`、`extensions: true`、`skills: true`，�
 
 ## Alternatives
 
-| Alternative | Why not chosen |
-| --- | --- |
-| TypeScript hardcode definitions | 不利于阅读、覆盖和 npm 资源验证 |
-| Primary/Spawned 分成两个 extension | 容易造成协议、工具和版本漂移 |
-| 所有 runtime 注册全部工具后运行时拒绝 | 模型仍能看到无权使用的 Agent/StopAgent，工具表面不真实 |
-| CSV 与数组同时支持 | 扩大解析与诊断表面，没有未发布兼容需求 |
-| Extension blacklist | 需要复制 pi 的 extension discovery，显式 allowlist 已能表达边界 |
+| Alternative                           | Why not chosen                                                  |
+| ------------------------------------- | --------------------------------------------------------------- |
+| TypeScript hardcode definitions       | 不利于阅读、覆盖和 npm 资源验证                                 |
+| Primary/Spawned 分成两个 extension    | 容易造成协议、工具和版本漂移                                    |
+| 所有 runtime 注册全部工具后运行时拒绝 | 模型仍能看到无权使用的 Agent/StopAgent，工具表面不真实          |
+| CSV 与数组同时支持                    | 扩大解析与诊断表面，没有未发布兼容需求                          |
+| Extension blacklist                   | 需要复制 pi 的 extension discovery，显式 allowlist 已能表达边界 |
 
 ## Consequences
 

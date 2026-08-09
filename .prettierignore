@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+reports/
+assets/
+agents/
+docs/
+AGENTS.md
+README.md
+*.tgz

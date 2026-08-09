@@ -6,7 +6,7 @@ Definition 只在 `Agent` 创建时解析。文件之后发生变化不会热更
 
 ## Discovery
 
-pi-herdr 先确定 Primary 创建时的 definition root：位于 Git worktree 中时使用 `git rev-parse --show-toplevel` 的结果，否则使用当前 cwd。随后按以下优先级查找：
+pi-herdr 从 Primary 当前 Pi session 的 `ExtensionContext.cwd` 确定 definition root：该 cwd 位于 Git worktree 中时使用 `git rev-parse --show-toplevel` 的结果，否则直接使用该 cwd。恢复其他项目的 session 不依赖启动 Node 进程时的 cwd。随后按以下优先级查找：
 
 1. `<root>/.pi/agents/<name>.md`
 2. `<root>/.agents/agents/<name>.md`
@@ -42,24 +42,24 @@ enabled: true
 
 支持字段：
 
-| Field | Type | Meaning |
-| --- | --- | --- |
-| `description` | string | 角色列表和 Agent 工具说明使用的简短描述 |
-| `model` | string / string[] | 初始模型或按顺序尝试的候选列表 |
-| `thinking` | string | 初始 thinking level |
-| `tools` | string[] | 工作工具 allowlist；`[all]` 表示全部可用工作工具 |
-| `extensions` | boolean / string[] | `true` 发现普通 extensions，`false` 禁用，数组显式加载指定资源 |
-| `skills` | boolean / string[] | `true` 发现 skills，`false` 禁用，数组显式加载指定资源 |
-| `disallowed_tools` | string[] | 从最终工作工具中移除的工具 |
-| `enabled` | boolean | `false` 时该角色不可创建 |
+| Field              | Type                                                            | Meaning                                                        |
+| ------------------ | --------------------------------------------------------------- | -------------------------------------------------------------- |
+| `description`      | string                                                          | Definition 的人类可读角色摘要；不覆盖单次 `Agent.description`  |
+| `model`            | string / string[]                                               | 初始模型或按顺序尝试的候选列表                                 |
+| `thinking`         | `off` / `minimal` / `low` / `medium` / `high` / `xhigh` / `max` | 初始 thinking level                                            |
+| `tools`            | string[]                                                        | 工作工具 allowlist；`[all]` 表示全部可用工作工具               |
+| `extensions`       | boolean / string[]                                              | `true` 发现普通 extensions，`false` 禁用，数组显式加载指定资源 |
+| `skills`           | boolean / string[]                                              | `true` 发现 skills，`false` 禁用，数组显式加载指定资源         |
+| `disallowed_tools` | string[]                                                        | 从最终工作工具中移除的工具                                     |
+| `enabled`          | boolean                                                         | `false` 时该角色不可创建                                       |
 
-集合字段只接受 YAML 数组，不解析 CSV。`extensions` 与 `skills` 数组中的相对路径以当前选中的 definition 文件目录为基准；绝对路径保持不变。
+集合字段只接受 YAML 数组，不解析 CSV。`model` 数组至少包含一个非空候选；`tools: [all]` 中的 `all` 必须是唯一条目。`tools: []` 表示不加载普通工作工具，但 Spawned 控制工具仍存在；`extensions: []` 与 `skills: []` 表示关闭原生发现且不显式加载任何对应资源。`extensions` 与 `skills` 数组中的相对路径以当前选中的 definition 文件目录为基准；绝对路径保持不变。
 
 Frontmatter 是封闭 schema，表格之外的字段全部报错。Worktree 是单次 `Agent` 调用的文件系统选择，不属于角色 definition。
 
 ## Runtime Roles and Resources
 
-Primary 与 Spawned 运行同一个 pi-herdr extension。创建命令注入 Spawned role，使同一入口只注册 `ListAgents`、`SendMessage` 与 name 同步；无论 definition 如何配置普通 extensions，pi-herdr 都不会在 Spawned 模式注册 `Agent` 或 `StopAgent`。
+Primary 与 Spawned 运行同一个 pi-herdr extension。创建命令通过 Pi flag `--pi-herdr-role spawned` 注入 Spawned role，使同一入口只注册 `ListAgents`、`SendMessage` 与 name 同步；无论 definition 如何配置普通 extensions，pi-herdr 都不会在 Spawned 模式注册 `Agent` 或 `StopAgent`。Worktree RPC 不传递 role env。
 
 Bundled explorer 使用明确的只读工具数组，并设置 `extensions: false`、`skills: false`。pi-herdr 的 Spawned 模式仍作为创建命令显式指定的 extension 加载，不属于“普通 extensions”发现范围。
 
@@ -90,4 +90,4 @@ agents/
 └── general-purpose.md
 ```
 
-未来 `package.json#files` 必须同时包含 `dist` 和 `agents`；运行时通过 `import.meta.url` 定位 bundled 目录。发布前使用 `npm pack --dry-run` 或 `npm pack --json` 验证两份 Markdown 进入 tarball。
+`package.json#files` 同时包含 `dist` 和 `agents`；运行时通过 `import.meta.url` 定位 bundled 目录。`npm run verify:package` 构建并检查 npm tarball，确保两份 Markdown definition 与编译后的 extension 一起发布，并排除源码、测试和其他开发文件。

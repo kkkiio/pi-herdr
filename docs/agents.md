@@ -31,9 +31,13 @@ Agent({
 - `model` 与 `thinking` 覆盖 definition 的初始值；Agent 启动后允许用户使用 pi 原生能力修改。
 - `isolation: "worktree"` 创建独立 worktree workspace；未设置时共享当前 workspace 与 cwd。
 
-创建过程只有在 `agent.start` 成功且初始 `agent.prompt` 被 herdr 接受后才返回 `launched`，不等待 Agent 完成工作。任一步失败都会回滚本次新建的 pane/tab、尚未承载工作的 session，并以 `force: false` 尝试移除新 worktree；herdr 拒绝移除时保留现场，残留资源进入错误信息。
+raw `agent.start` 成功只表示 Pi launch 已提交；返回的 `AgentInfo` 可能仍有 `launch_pending: true`。pi-herdr 用只读 `agent.get` 等待 `launch_pending: false` 且 `interactive_ready: true`，之后才发送初始 `agent.prompt`。只有 prompt 被 Herdr 接受后才返回 `launched`，但不会等待 Agent 完成本轮工作。
 
-共享 workspace 时，pi-herdr 使用 `tab.create` 返回的 root pane。worktree 模式直接复用 `worktree.create` 返回的 workspace、tab 与 root pane，不创建第二个 tab。
+共享 workspace 时，pi-herdr 使用 `tab.create` 返回的 root pane。worktree 模式直接复用 `worktree.create` 返回的 workspace、tab 与 root pane，不创建第二个 tab，并在创建后显式调用 `tab.rename` 同步 name。
+
+创建失败时，共享模式关闭本次新建的 tab；worktree 模式先以 `force: false` 尝试 `worktree.remove`，安全移除失败后再关闭本次 pane。只有在 runtime 已确认关闭、Herdr 返回的是本次 launch 的 `herdr:pi` session，且绝对 `.jsonl` path 位于 Pi 的 session directory 内时，才删除该精确文件；目录解析优先使用 `PI_CODING_AGENT_SESSION_DIR`，其次使用项目覆盖后的 `settings.json#sessionDir`，否则使用 agent directory 下的 `sessions/`。任何无法验证或完成的清理都会作为残留资源写入原始 launch 错误，不会扫描或删除其他 session/worktree。
+
+若 `tab.create` 或 `worktree.create` 已发送、但响应在返回 ID 前丢失，pi-herdr 不重放 mutation，也不猜测哪个并发创建的容器属于自己；错误会明确标记可能存在无法寻址的 container residual，供用户通过 Herdr 检查。
 
 ## StopAgent
 
@@ -52,7 +56,7 @@ StopAgent({
 
 ## 单扩展双模式
 
-Primary 与 Spawned 使用同一个 pi-herdr extension 入口，通过创建时注入的 runtime role 选择工具表面：
+Primary 与 Spawned 使用同一个 pi-herdr extension 入口，通过 `agent.start.args` 传给 Pi 的 `--pi-herdr-role spawned` flag 选择工具表面。`worktree.create` 没有 env 参数，role 不依赖 worktree 环境变量：
 
 - Primary 模式注册 `Agent`、`StopAgent`、`ListAgents`、`SendMessage` 和用户 UI。
 - Spawned 模式只注册 `ListAgents`、`SendMessage` 和 name 同步逻辑。
@@ -94,9 +98,9 @@ starting/working/blocked/idle/done/unknown -> closed
 
 ```json
 {
-  "piHerdr": {
-    "maxMembers": 32
-  }
+	"piHerdr": {
+		"maxMembers": 32
+	}
 }
 ```
 

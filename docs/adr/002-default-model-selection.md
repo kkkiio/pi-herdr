@@ -1,6 +1,6 @@
 # ADR-002: Agent Initial Model Selection
 
-- 状态：提议（Proposed）
+- 状态：已接受（Accepted）
 - 日期：2026-08-09
 
 ## Context
@@ -52,12 +52,12 @@ pi-herdr 不监听或回滚模型变化，也不要求为不同模型创建新 A
 
 ## Alternatives
 
-| Alternative | Why not chosen |
-| --- | --- |
-| 所有 Agent 继承 Primary 模型 | Explorer 会持续消耗不必要的高价模型 token |
-| 固定 provider/model | 用户未必安装、启用或认证对应 provider |
-| 显式 model 失败时静默回退 | 会掩盖调用参数拼写错误或违反调用方明确意图 |
-| 创建后锁定模型 | 限制 pi 原生交互能力，并需要额外拦截与回滚逻辑 |
+| Alternative                  | Why not chosen                                 |
+| ---------------------------- | ---------------------------------------------- |
+| 所有 Agent 继承 Primary 模型 | Explorer 会持续消耗不必要的高价模型 token      |
+| 固定 provider/model          | 用户未必安装、启用或认证对应 provider          |
+| 显式 model 失败时静默回退    | 会掩盖调用参数拼写错误或违反调用方明确意图     |
+| 创建后锁定模型               | 限制 pi 原生交互能力，并需要额外拦截与回滚逻辑 |
 
 ## Consequences
 
