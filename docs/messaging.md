@@ -79,3 +79,7 @@ SendMessage({
 - `agent.prompt`、`agent.start`、rename、close 等 mutating RPC 不自动重放，避免重复提交或重复操作。
 
 消息不会提升接收方权限，也不能代替用户批准。Spawned 模式始终拥有 `ListAgents` 和 `SendMessage`，但不拥有 `Agent` 或 `StopAgent`。
+
+## External References
+
+- [Claude Code cross-session messaging mechanics](https://claudefa.st/blog/guide/mechanics/cross-session-messaging) — Claude Code v2.1.224+ 的跨会话消息机制，与本文档语义独立地收敛到同一设计：同名 `ListAgents` / `SendMessage` 工具、发送方 name + reply address + 纯文本正文、reply 地址随会话状态失效、消息不代替用户批准。维护消息边界语义时可作为外部对照。

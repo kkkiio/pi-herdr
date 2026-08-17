@@ -22,7 +22,7 @@ export function registerAgentTools(
 			name: "Agent",
 			label: "Agent",
 			description:
-				"Launch a persistent background Pi Agent in a new Herdr tab. Returns after startup and initial prompt delivery, not after the work finishes. Use ListAgents and SendMessage for later interaction.",
+				"Launch a persistent background Agent in a new Herdr tab. Returns after startup and initial prompt delivery, not after the work finishes. Use ListAgents and SendMessage for later interaction.",
 			promptSnippet: "Launch a persistent background Agent in Herdr.",
 			promptGuidelines: [
 				"Give every Agent a unique lowercase name matching [a-z][a-z0-9_-]{0,31}.",
