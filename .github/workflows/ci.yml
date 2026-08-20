@@ -55,6 +55,7 @@ jobs:
 
       - name: Install Herdr 0.7.5
         run: |
+          mkdir -p "$HOME/.local/bin"
           curl -sSfL https://github.com/herdrdev/herdr/releases/download/v0.7.5/herdr-linux-x86_64 -o /tmp/herdr
           install -m 755 /tmp/herdr "$HOME/.local/bin/herdr"
           herdr --version
