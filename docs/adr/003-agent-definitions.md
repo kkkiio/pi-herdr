@@ -13,7 +13,7 @@ Primary 与 Spawned 需要不同工具表面，但它们属于同一个 npm exte
 
 ### 1. Markdown definitions
 
-Bundled definitions 位于 npm 包的 `agents/` 目录，由 YAML frontmatter 和 Markdown body 组成。Body 追加到公共 Spawned system prompt，不替换 identity、reply、live lifecycle 和禁止递归 spawn 等控制面规则。
+Bundled definitions 位于 npm 包的 `agents/` 目录,由 YAML frontmatter 和 Markdown body 组成。Body 追加到 Spawned system prompt;生命周期与消息规则由控制工具的 description 与 `promptGuidelines` 承载。投递机制见 ADR-005。
 
 运行时通过 `import.meta.url` 定位 bundled 资源。`package.json#files` 同时包含 `dist` 与 `agents`，发布检查断言两份 Markdown 进入 tarball。
 

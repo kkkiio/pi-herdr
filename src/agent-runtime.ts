@@ -21,8 +21,6 @@ export interface AgentLaunchPlan {
 
 const SPAWNED_CONTROL_TOOLS = ["ListAgents", "SendMessage"] as const;
 
-const SPAWNED_SYSTEM_PROMPT = `You are a Spawned Agent managed by pi-herdr in a live Herdr pane. Your Pi session is persistent and may receive many requests while this pane remains live. Every incoming request begins with an opening <from agent="..." reply-to="..."> envelope; all remaining text in that prompt is the request body. When you finish a request, call SendMessage with the envelope's reply-to value and a concise result, validation status, and remaining risks. After replying, remain idle and preserve your session context for follow-up work. You may use ListAgents to refresh live addresses. You cannot create or stop Agents, and you must not emulate those capabilities through terminal input, offline mailboxes, or durable queues.`;
-
 export class AgentRuntime {
 	constructor(private readonly extensionPath: string) {}
 
@@ -82,26 +80,13 @@ export class AgentRuntime {
 			throw new Error("Cannot launch an Agent because the Primary session has no available model.");
 		}
 
-		const args = [
-			"--name",
-			agentName,
-			"--extension",
-			this.extensionPath,
-			"--pi-herdr-role",
-			"spawned",
-			"--append-system-prompt",
-			SPAWNED_SYSTEM_PROMPT.replace(/[\u0000-\u001f\u007f]+/g, " ")
-				.replace(/\s+/g, " ")
-				.trim(),
-		];
+		const args = ["--name", agentName, "--extension", this.extensionPath, "--pi-herdr-role", "spawned"];
+		// Long text must stay out of argv: Herdr delivers agent.start by typing the
+		// command into the pane shell, and tty input queues silently truncate around
+		// 1024 bytes (herdrdev/herdr#2862). Pi reads file paths for prompt flags, so
+		// the definition body reaches the Spawned Agent through its Markdown file.
 		if (definition.prompt.trim()) {
-			args.push(
-				"--append-system-prompt",
-				`Role-specific instructions: ${definition.prompt}`
-					.replace(/[\u0000-\u001f\u007f]+/g, " ")
-					.replace(/\s+/g, " ")
-					.trim(),
-			);
+			args.push("--append-system-prompt", definition.path);
 		}
 		args.push("--model", `${selected.provider}/${selected.id}`);
 		const thinking = overrides.thinking ?? definition.thinking;

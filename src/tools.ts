@@ -90,6 +90,7 @@ export function registerAgentTools(
 		description:
 			"List every live Agent and Pi peer visible through the current Herdr session, preserving Herdr AgentInfo fields and statuses.",
 		promptSnippet: "List live Agents and peers in the current Herdr session.",
+		promptGuidelines: role === "spawned" ? ["Use ListAgents to refresh live Agent addresses."] : undefined,
 		parameters: Type.Object({}, { additionalProperties: false }),
 		execute: async (_toolCallId, _params, signal) => {
 			const result = await supervisor.list(signal);
@@ -104,9 +105,20 @@ export function registerAgentTools(
 		name: "SendMessage",
 		label: "Send Message",
 		description:
-			"Deliver a text request or result to a live Agent or peer through Herdr agent.prompt. Delivery requires a currently reachable target and is not durably queued.",
+			role === "spawned"
+				? 'Deliver a text request or result to a live Agent or peer through Herdr agent.prompt. Every request you receive begins with an opening <from agent="..." reply-to="..."> envelope; all remaining text in that prompt is the request body. Delivery requires a currently reachable target and is not durably queued.'
+				: "Deliver a text request or result to a live Agent or peer through Herdr agent.prompt. Delivery requires a currently reachable target and is not durably queued.",
 		promptSnippet: "Send a message to a live Agent or peer.",
-		promptGuidelines: ["When replying to an Agent request, use the live reply-to address from its opening envelope."],
+		promptGuidelines: [
+			"When replying to an Agent request, use the live reply-to address from its opening envelope.",
+			...(role === "spawned"
+				? [
+						"You are a Spawned Agent managed by pi-herdr in a live Herdr pane; your Pi session is persistent and may receive many requests while this pane remains live.",
+						"When you finish a request, call SendMessage with the envelope's reply-to value and a concise result, validation status, and remaining risks.",
+						"After replying, remain idle and preserve your session context for follow-up work.",
+					]
+				: []),
+		],
 		parameters: Type.Object(
 			{
 				agent: Type.String({ minLength: 1, description: "Live Agent name or pane ID." }),
