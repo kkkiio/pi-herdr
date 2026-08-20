@@ -38,10 +38,10 @@
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
 		"verify:package": "npm run build && node scripts/verify-package.mjs",
-		"test": "npm run test:fast",
-		"test:fast": "vitest run",
+		"test": "npm run test:bdd",
 		"test:bdd": "node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs",
-		"test:regression": "npm run format:check && npm run typecheck && npm run test:fast && npm run verify:package && npm run test:bdd",
+		"test:e2e": "npm run build && HERDR_E2E=1 node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs",
+		"test:regression": "npm run format:check && npm run typecheck && npm run verify:package && npm run test:bdd",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
 		"prepack": "npm run build"
 	},
@@ -64,7 +64,6 @@
 		"prettier": "^3.9.6",
 		"tsx": "^4.23.11",
 		"typebox": "1.3.11",
-		"typescript": "5.9.3",
-		"vitest": "^4.1.10"
+		"typescript": "5.9.3"
 	}
 }

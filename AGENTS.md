@@ -2,7 +2,7 @@
 
 ## Project Structure Guide
 
-pi-herdr 是 TypeScript ESM Pi extension。`src/` 实现 Herdr 0.7.5 / protocol 17 的 socket 控制面，`test/` 区分快速测试与完整 BDD 回归，`docs/adr/` 中的 Accepted ADR 是实现与维护依据；`agents/` 中的 Markdown 是随 npm 包发布的运行时资源。
+pi-herdr 是 TypeScript ESM Pi extension。`src/` 实现 Herdr 0.7.5 / protocol 17 的 socket 控制面，`test/` 是 Cucumber BDD 全量回归，`docs/adr/` 中的 Accepted ADR 是实现与维护依据；`agents/` 中的 Markdown 是随 npm 包发布的运行时资源。BDD 分两层：默认场景用 `FakeHerdrServer`(protocol 17 规范编码，负责故障注入与 wire 级断言)；`@herdr-e2e` 场景直连真 herdr + 真 Pi + faux provider(只断言最终可观测状态，不做中间代理)。
 
 ### Repo Structure & Important Files
 
@@ -39,10 +39,8 @@ pi-herdr 是 TypeScript ESM Pi extension。`src/` 实现 Herdr 0.7.5 / protocol 
 │   ├── tools.ts                           # 四个 Pi tool 的 schema 与注册
 │   └── ui.ts                              # `/agents` live runtime UI
 ├── test/
-│   ├── bdd/                               # Cucumber 全量回归 features/steps/support
-│   └── *.test.ts                          # Vitest 快速单元与协议测试
+│   └── bdd/                               # Cucumber 全量回归 features/steps/support；@herdr-e2e 为真机场景
 ├── cucumber.mjs                           # BDD profile 与 TypeScript support 配置
-├── vitest.config.ts                       # 快速测试配置
 ├── tsconfig.json                          # NodeNext build/typecheck 配置
 └── package.json                           # npm/Pi manifest 与 canonical scripts
 ```
@@ -107,19 +105,9 @@ When changing Agent naming:
 - Synchronize valid `session_info_changed` events to herdr Agent name and tab label.
 - Use pane ID as the live internal key. Restore every partially changed name surface and report an error when rename validation or synchronization fails.
 
-### Bundled Definitions
-
 When changing `agents/explorer.md`, keep Bash available for `rg`, Git queries, statistics, and file analysis while retaining the read-only role contract.
 
-When changing `agents/*.md` or the definition loader, keep lifecycle and messaging rules in the shared Agent system prompt; keep role-specific expertise in each Markdown body.
-
-Keep definition collections as YAML arrays. The supported fields are exactly `description`, `model`, `thinking`, `tools`, `extensions`, `skills`, `disallowed_tools`, and `enabled`; reject every unknown field. Keep `extensions` and `skills` boolean for every definition source: `true` leaves native cwd discovery enabled, while `false` disables it. Never turn definition resource paths into explicit pi CLI extension or skill inputs.
-
-List effective enabled definitions from the global directory and then bundled definitions in the open-string `definition` parameter description. Global names shadow bundled names; malformed or disabled global definitions do not fall back to a same-name bundled definition.
-
-Use `definition: string` as the selector. Resolve a bare name from global then bundled definitions; resolve an absolute or explicit relative `.md` path exactly, with relative paths based on the Primary call cwd. Do not automatically select project definitions from the Primary Git root or scan external repositories.
-
-Recommend that Primary Agents inspect task-relevant `.pi/agents` and `.agents/agents` directories with ordinary file/Git tools before using the fallback catalog. A definition path selects role configuration only and never implies Agent workspace or cwd. Resolve relative `definition` paths and relative `cwd` values independently from the Primary call cwd.
+When changing `agents/*.md` or the definition loader, follow ADR-005: lifecycle and messaging rules live in the control tools' descriptions and `promptGuidelines`; launch argv stays short ASCII flags only because Herdr types `agent.start` into the pane shell and tty input queues truncate above 1024 bytes; definition content reaches the Spawned Agent via `--append-system-prompt <definition path>`.
 
 Treat an explicit definition path as `Agent` input rather than a pi auto-discovered project resource. Do not inject project trust policy into Primary prompts or tool guidelines. Do not read, write, cache or override pi trust state, and do not pass `--approve` or `--no-approve`; every Spawned pi resolves native project trust for its actual cwd.
 
@@ -157,13 +145,18 @@ When changing TypeScript, tests, definitions, scripts, or configuration, run the
 npm run format:check
 npm run typecheck
 npm run build
-npm run test:fast
 ```
 
 Before pushing implementation changes or opening/updating a PR, run the same full regression used by CI:
 
 ```bash
 npm run test:regression
+```
+
+When a real Herdr 0.7.5 binary is available (or via `HERDR_BIN`), run the end-to-end scenarios that spawn a real `herdr server`, real Pi processes, and a faux OpenAI-compatible provider (`@herdr-e2e` tags, excluded from default runs):
+
+```bash
+npm run test:e2e
 ```
 
 When changing package metadata, build output, bundled definitions, or publishing behavior, verify the npm tarball explicitly:
