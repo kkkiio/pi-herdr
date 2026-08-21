@@ -167,11 +167,12 @@ npm run verify:package
 
 ### Release
 
-Releases use an agent-driven Release PR, no bot:
+Releases use an agent-driven Release PR, no bot and (during v0.x) no CHANGELOG.md — the GitHub Release notes are the changelog:
 
-1. The coding agent aggregates merged PRs since the last tag from conventional commit titles (`fix:` → patch, `feat:` → minor, breaking → major), bumps `package.json`, and writes the CHANGELOG entries. Keep PR titles semantic — they are the release-notes source.
-2. Open the Release PR and merge when green; tag the merge commit (`v*`).
-3. Publish with `npm publish`. `prepublishOnly` runs the full regression plus the real-Herdr e2e on the publishing machine, which covers macOS-specific delivery behavior that Linux CI cannot see; the publishing machine therefore needs a `herdr` binary (or `HERDR_BIN`).
+1. The coding agent aggregates merged PRs since the last tag from conventional commit titles and bumps `package.json` (`fix:` → patch, `feat:` → minor; under 0.x, breaking changes also just bump minor). Keep PR titles semantic — they are the release-notes source.
+2. Open the Release PR (version bump only) and merge when green; tag the merge commit (`v*`).
+3. Create the GitHub Release on that tag with notes rewritten from the merged PR titles — grouped by feat/fix/chore, written for users, each linking its PR.
+4. Publish with `npm publish`. `prepublishOnly` runs the full regression plus the real-Herdr e2e on the publishing machine, which covers macOS-specific delivery behavior that Linux CI cannot see; the publishing machine therefore needs a `herdr` binary (or `HERDR_BIN`).
 
 ### Documentation Verification
 
