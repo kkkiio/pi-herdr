@@ -29,3 +29,8 @@ Feature: Runtime roles and Agent definitions
     Then the first matching normalized definition model is selected
     And unavailable definition models inherit the Primary model
     And an unavailable explicit model override is rejected
+
+  Scenario: Oversized launch argv fails fast instead of risking silent tty truncation
+    Given selected definitions and authenticated Primary models
+    When a launch plan is resolved for a definition at a deep multi-byte path
+    Then the launch plan rejects the oversized argv with a tty budget error

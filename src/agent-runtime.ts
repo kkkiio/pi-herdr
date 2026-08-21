@@ -21,6 +21,10 @@ export interface AgentLaunchPlan {
 
 const SPAWNED_CONTROL_TOOLS = ["ListAgents", "SendMessage"] as const;
 
+// tty input queues silently truncate typed commands around 1024 bytes
+// (herdrdev/herdr#2862); keep the final launch argv well below that.
+const MAX_LAUNCH_ARGV_BYTES = 960;
+
 export class AgentRuntime {
 	constructor(private readonly extensionPath: string) {}
 
@@ -104,6 +108,20 @@ export class AgentRuntime {
 		}
 		if (definition.extensions === false) args.push("--no-extensions");
 		if (definition.skills === false) args.push("--no-skills");
+
+		// definition.path and extensionPath lengths vary with user layout (and
+		// multi-byte characters cost up to 3 UTF-8 bytes each), so the tty cap
+		// above cannot be guaranteed by construction. Fail fast on the final argv
+		// instead of letting a deep path reintroduce silent truncation; the
+		// 4-byte per-arg allowance covers Herdr's quoting and separators.
+		const serializedBytes = args.reduce((total, arg) => total + Buffer.byteLength(arg, "utf8") + 4, 0);
+		if (serializedBytes > MAX_LAUNCH_ARGV_BYTES) {
+			throw new Error(
+				`Agent launch command would be ${serializedBytes} bytes, exceeding the ${MAX_LAUNCH_ARGV_BYTES}-byte tty safety budget ` +
+					`(Herdr silently truncates longer typed commands, herdrdev/herdr#2862). ` +
+					`Move the definition file to a shorter path or select it by catalog name.`,
+			);
+		}
 
 		return {
 			args,

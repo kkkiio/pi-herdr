@@ -160,14 +160,22 @@ export class HerdrHarness {
 		const lookup = spawnSync("/bin/sh", ["-c", `command -v -- "${configured}"`], { encoding: "utf8" });
 		const provider = await FauxProvider.start();
 		const harness = new HerdrHarness(root, lookup.stdout?.toString().trim() || configured, provider);
-		await harness.prepareTree(options.piBinDir, options.shell);
-		harness.spawnServer(options.piBinDir, options.shell);
-		await harness.waitForSocket(E2E_STAGE.serverBoot);
-		const pong = await harness.rpc("ping", {});
-		if (pong.protocol !== HERDR_PROTOCOL) {
-			throw new Error(
-				`Real Herdr at ${harness.herdrBin} spoke protocol ${String(pong.protocol)} (version ${String(pong.version)}); pi-herdr targets protocol ${HERDR_PROTOCOL}.`,
-			);
+		try {
+			await harness.prepareTree(options.piBinDir, options.shell);
+			harness.spawnServer(options.piBinDir, options.shell);
+			await harness.waitForSocket(E2E_STAGE.serverBoot);
+			const pong = await harness.rpc("ping", {});
+			if (pong.protocol !== HERDR_PROTOCOL) {
+				throw new Error(
+					`Real Herdr at ${harness.herdrBin} spoke protocol ${String(pong.protocol)} (version ${String(pong.version)}); pi-herdr targets protocol ${HERDR_PROTOCOL}.`,
+				);
+			}
+		} catch (error) {
+			// Failures here happen before the Cucumber step can register harness
+			// cleanup; stop() tolerates a partially started server and always
+			// closes the provider listener.
+			await harness.stop();
+			throw error;
 		}
 		return harness;
 	}

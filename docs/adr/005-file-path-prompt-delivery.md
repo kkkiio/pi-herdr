@@ -15,7 +15,7 @@ pi-herdr 原先把共享生命周期规则和 `Role-specific instructions:` 前�
 
 ### 1. Launch argv 只携带短 ASCII flag
 
-`AgentRuntime.resolveLaunchPlan` 生成的参数只剩 `--name`、`--extension`、`--pi-herdr-role`、`--model`、`--thinking`、`--tools`、`--exclude-tools`、`--no-extensions`、`--no-skills`,总量约 300 字节,远离 tty 阈值。任何长文本一律不作为内联 argv 传递。
+`AgentRuntime.resolveLaunchPlan` 生成的参数只剩 `--name`、`--extension`、`--pi-herdr-role`、`--model`、`--thinking`、`--tools`、`--exclude-tools`、`--no-extensions`、`--no-skills`,总量约 300 字节,远离 tty 阈值。任何长文本一律不作为内联 argv 传递。definition 绝对路径长度随用户目录布局变化且多字节字符最高占 3 UTF-8 字节,阈值无法靠构造保证,因此 `resolveLaunchPlan` 对最终 argv 做字节预算检查(960 字节,含 quoting 余量),超限时 fail fast 并建议改用更短路径或 catalog 名称,而不是放任静默截断。
 
 ### 2. 生命周期与消息规则迁入工具的 description 与 `promptGuidelines`
 
