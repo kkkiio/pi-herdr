@@ -153,7 +153,7 @@ Before pushing implementation changes or opening/updating a PR, run the same ful
 npm run test:regression
 ```
 
-When a real Herdr 0.7.5 binary is available (or via `HERDR_BIN`), run the end-to-end scenarios that spawn a real `herdr server`, real Pi processes, and a faux OpenAI-compatible provider (`@herdr-e2e` tags, excluded from default runs):
+When a real Herdr 0.7.5 binary is available (or via `HERDR_BIN`), run the end-to-end scenarios that spawn a real `herdr server`, real Pi processes, and a faux OpenAI-compatible provider (`@herdr-e2e` tags, excluded from default runs but always run in CI; run locally before pushing changes to the launch/delivery path — Linux CI cannot see macOS-specific tty behavior):
 
 ```bash
 npm run test:e2e
@@ -164,6 +164,14 @@ When changing package metadata, build output, bundled definitions, or publishing
 ```bash
 npm run verify:package
 ```
+
+### Release
+
+Releases use an agent-driven Release PR, no bot:
+
+1. The coding agent aggregates merged PRs since the last tag from conventional commit titles (`fix:` → patch, `feat:` → minor, breaking → major), bumps `package.json`, and writes the CHANGELOG entries. Keep PR titles semantic — they are the release-notes source.
+2. Open the Release PR and merge when green; tag the merge commit (`v*`).
+3. Publish with `npm publish`. `prepublishOnly` runs the full regression plus the real-Herdr e2e on the publishing machine, which covers macOS-specific delivery behavior that Linux CI cannot see; the publishing machine therefore needs a `herdr` binary (or `HERDR_BIN`).
 
 ### Documentation Verification
 

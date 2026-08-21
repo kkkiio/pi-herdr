@@ -43,7 +43,8 @@
 		"test:e2e": "npm run build && HERDR_E2E=1 node --import tsx ./node_modules/@cucumber/cucumber/bin/cucumber.js --config cucumber.mjs",
 		"test:regression": "npm run format:check && npm run typecheck && npm run verify:package && npm run test:bdd",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
-		"prepack": "npm run build"
+		"prepack": "npm run build",
+		"prepublishOnly": "npm run test:regression && npm run test:e2e"
 	},
 	"pi": {
 		"extensions": [
