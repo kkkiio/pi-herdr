@@ -117,7 +117,7 @@ export function registerAgentTools(
 						"When you finish a request, call SendMessage with the envelope's reply-to value and a concise result, validation status, and remaining risks.",
 						"After replying, remain idle and preserve your session context for follow-up work.",
 					]
-				: []),
+				: ["Do not sleep or poll for a reply; end your turn, and the reply arrives as a new steering message."]),
 		],
 		parameters: Type.Object(
 			{

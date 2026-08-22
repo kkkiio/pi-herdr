@@ -70,6 +70,8 @@ SendMessage({
 
 结果没有独立 store、消费协议或完成通知抑制。一次回复是否成功只取决于 reply target 当时是否 live。
 
+回复通过 Herdr 打字进目标 Pi TUI,按 steering 语义在接收方当前回合结束后送达。发送方因此不应 sleep 或轮询等待回复:结束当前回合,回复会作为新的 steering 消息自动开始下一轮。
+
 ## Delivery and Failures
 
 - 不实现 durable mailbox、message ID、ack、去重或 offline queue。
