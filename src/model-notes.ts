@@ -1,14 +1,29 @@
+export interface ModelNote {
+	/** For the chooser: what the model is good at, speed, working style. */
+	capacity: string;
+	/** For the receiver: how much to trust its conclusions. Omitted when there is nothing actionable. */
+	soundness?: string;
+}
+
 /**
- * Delegation heuristics for specific models, surfaced in the Agent tool
- * guidelines only when the model is currently authenticated and available.
+ * Delegation heuristics for specific models. `capacity` is surfaced in the
+ * Agent tool guidelines when the model is available; `soundness` travels in
+ * message envelopes so receivers can calibrate trust.
  *
  * These are experience notes, not benchmarks: keep them hedged, keep the
  * list short, and revisit entries when models change.
  */
-export const MODEL_NOTES: Record<string, string> = {
-	"deepseek-v4-flash": "fast, but verify its conclusions before acting on them",
-	"kimi-3": "strong at frontend and visual tasks, but slow",
-	"gpt-5.6-sol": "rigorous, but tends to add self-justifying docs and tests that pollute project context",
+export const MODEL_NOTES: Record<string, ModelNote> = {
+	"deepseek-v4-flash": {
+		capacity: "fast, but usually cannot solve hard problems",
+		soundness: "verify its conclusions before acting on them",
+	},
+	"kimi-3": {
+		capacity: "strong at frontend and visual tasks, but slow",
+	},
+	"gpt-5.6-sol": {
+		capacity: "rigorous, but tends to add self-justifying docs and tests that pollute project context",
+	},
 };
 
 // Same normalization as AgentRuntime model matching: case-insensitive,
@@ -25,11 +40,11 @@ export function availableModelNotes(availableModelIds: readonly string[]): strin
 	const available = new Set(availableModelIds.map(normalizeModelId));
 	const notes = Object.entries(MODEL_NOTES).filter(([id]) => available.has(normalizeModelId(id)));
 	if (!notes.length) return undefined;
-	return `Available model notes for Agent({model}): ${notes.map(([id, note]) => `${id} — ${note}`).join("; ")}.`;
+	return `Available model notes for Agent({model}): ${notes.map(([id, note]) => `${id} — ${note.capacity}`).join("; ")}.`;
 }
 
-/** Calibration note for a model ("provider/id" or bare id), if one exists. */
-export function modelNoteFor(model: string): string | undefined {
+/** Calibration hint for a model ("provider/id" or bare id), if one exists. */
+export function modelSoundnessNote(model: string): string | undefined {
 	const normalized = normalizeModelId(model.split("/").pop() ?? model);
-	return Object.entries(MODEL_NOTES).find(([id]) => normalizeModelId(id) === normalized)?.[1];
+	return Object.entries(MODEL_NOTES).find(([id]) => normalizeModelId(id) === normalized)?.[1].soundness;
 }
