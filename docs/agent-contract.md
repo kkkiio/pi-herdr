@@ -36,7 +36,7 @@ pi-herdr 不维护 offline Agent registry、durable mailbox、session-to-pane �
 Agent({
   description: string,
   prompt: string,
-  definition: string,
+  definition?: string,
   name: string,
   model?: string | string[],
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
@@ -51,7 +51,7 @@ Agent({
 
 - `description` 是工具结果与 UI 详情中的简短说明，不参与 tab label。
 - `prompt` 是第一条消息，使用与 `SendMessage` 相同的 `<from ...>` envelope。
-- `definition` 接受 catalog name，或以 `.md` 结尾的绝对路径、显式相对路径；完整选择与解析规则见 [Agent Definitions](agent-definitions.md)。
+- `definition` 可选：接受 catalog name，或以 `.md` 结尾的绝对路径、显式相对路径；完整选择与解析规则见 [Agent Definitions](agent-definitions.md)。省略时使用 Pi 默认配置，不加任何裁剪或 prompt 覆盖。
 - `name` 同时作为 Pi session name、Herdr live route name 和 tab label，必须符合 `[a-z][a-z0-9_-]{0,31}`。
 - `model` 与 `thinking` 覆盖 definition 的初始值；启动后仍可使用 Pi 原生能力修改。
 - `cwd` 选择新 Agent 的工作目录；相对路径以调用时的 cwd 为基准，未设置时继承该 cwd。

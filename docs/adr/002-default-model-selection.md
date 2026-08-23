@@ -23,11 +23,11 @@ model:
 
 数组按顺序选择第一个当前可用候选。
 
-### 2. Explorer 与 General Purpose 默认值
+### 2. Explorer 默认值与缺省继承
 
 Bundled explorer 优先使用 `gpt-5.6-luna`，其次使用 `deepseek-v4-flash`。Definition 候选均不可用时继承调用方当前模型。
 
-Bundled general-purpose 不指定 model，因此初始模型直接继承调用方当前模型。
+省略 definition 时不施加任何覆盖：初始模型直接继承调用方当前模型，Pi 使用默认 system prompt 与全部工作工具。
 
 ### 3. Selection precedence
 

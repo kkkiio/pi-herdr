@@ -6,7 +6,7 @@ Definition 只在 `Agent` 创建时解析。文件之后发生变化不会热更
 
 ## Selection and Discovery
 
-`Agent({ definition })` 接受 catalog 名称或项目 definition 路径。
+`Agent({ definition })` 接受 catalog 名称或项目 definition 路径；省略时使用 Pi 默认配置（无 prompt 文件、无工具裁剪、继承调用方模型）。
 
 ### Definition catalog
 
@@ -98,11 +98,7 @@ model 和 thinking 只是初始配置。Agent 启动后，用户通过 `/model` 
 - Bash 只用于读取、Git 查询、统计与分析，不创建、修改或删除文件。
 - 初始模型优先选择 `gpt-5.6-luna`、`deepseek-v4-flash`，均不可用时继承调用方模型。
 
-### `general-purpose`
-
-- 使用全部工作工具，并设置 `extensions: true`、`skills: true`，让 Pi 按原生信任与资源发现规则加载普通能力。
-- 初始模型继承调用方模型。
-- 适合实现、重构、测试、文档和开放式调查。
+不需要特定角色时省略 `definition`：新 Agent 使用 Pi 默认 system prompt、全部工作工具、原生 extensions/skills 发现，并继承调用方模型——不需要一个“通用”definition 来包装这些默认值。
 
 ## Packaging
 
@@ -110,8 +106,7 @@ Bundled definitions 位于 npm 包根目录的 `agents/`：
 
 ```text
 agents/
-├── explorer.md
-└── general-purpose.md
+└── explorer.md
 ```
 
 `package.json#files` 同时包含 `dist` 和 `agents`；运行时通过 `import.meta.url` 定位 bundled 目录。发布前使用 `npm run verify:package` 验证 Markdown 与编译入口进入 tarball。

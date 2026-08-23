@@ -11,8 +11,7 @@ pi-herdr 是 TypeScript ESM Pi extension。
 ├── AGENTS.md                              # 开发 Agent 的项目规则与操作指南
 ├── README.md                              # 用户入口、安装状态和最短使用示例
 ├── agents/                                # Bundled Agent definitions；npm 发布资源
-│   ├── explorer.md                        # 带 Bash 的只读搜索 Agent
-│   └── general-purpose.md                 # 具备完整工作工具的通用 Agent
+│   └── explorer.md                        # 带 Bash 的只读搜索 Agent；省略 definition 即为 Pi 默认 Agent
 ├── assets/
 │   └── pi-herdr-logo.png                  # README 品牌图
 ├── .github/

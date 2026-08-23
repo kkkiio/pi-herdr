@@ -17,10 +17,19 @@ export interface AgentDefinition {
 
 export interface ResolvedAgentDefinition extends AgentDefinition {
 	name: string;
-	source: "path" | "global" | "bundled";
+	source: "path" | "global" | "bundled" | "default";
 	path: string;
 	prompt: string;
 }
+
+// No definition selected: plain Pi defaults — no prompt file, no tool
+// allowlist, model and thinking inherited from the caller.
+const DEFAULT_DEFINITION: ResolvedAgentDefinition = {
+	name: "default",
+	source: "default",
+	path: "",
+	prompt: "",
+};
 
 type DefinitionSource = ResolvedAgentDefinition["source"];
 
@@ -54,7 +63,8 @@ export class AgentDefinitionStore {
 		this.bundledDir = resolve(options.bundledDir ?? fileURLToPath(new URL("../agents", import.meta.url)));
 	}
 
-	async load(selector: string, cwd: string): Promise<ResolvedAgentDefinition> {
+	async load(selector: string | undefined, cwd: string): Promise<ResolvedAgentDefinition> {
+		if (selector === undefined) return DEFAULT_DEFINITION;
 		if (typeof selector !== "string" || !selector.trim() || selector.trim() !== selector) {
 			throw new Error("Agent definition selector must contain visible text without surrounding whitespace.");
 		}

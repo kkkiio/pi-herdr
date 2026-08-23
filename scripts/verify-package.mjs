@@ -33,7 +33,6 @@ const requiredFiles = [
 	"dist/index.js",
 	"dist/index.d.ts",
 	"agents/explorer.md",
-	"agents/general-purpose.md",
 	"assets/pi-herdr-logo.png",
 ];
 const forbiddenPrefixes = [".github/", "docs/", "scripts/", "src/", "test/"];

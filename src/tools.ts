@@ -32,10 +32,12 @@ export function registerAgentTools(
 			{
 				description: Type.String({ minLength: 1, description: "Short human-readable purpose." }),
 				prompt: Type.String({ minLength: 1, description: "The first concrete request for the Agent." }),
-				definition: Type.String({
-					minLength: 1,
-					description: `Catalog name or absolute/explicit relative .md path. Available catalog: ${catalogDescription}`,
-				}),
+				definition: Type.Optional(
+					Type.String({
+						minLength: 1,
+						description: `Catalog name or absolute/explicit relative .md path. Omit to launch with Pi defaults. Available catalog: ${catalogDescription}`,
+					}),
+				),
 				name: Type.String({
 					pattern: "^[a-z][a-z0-9_-]{0,31}$",
 					description: "Unique live Agent, session, and tab name.",

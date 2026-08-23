@@ -98,7 +98,6 @@ Given("a Primary that has launched one Agent beside a live peer", async function
 		{
 			description: "Background implementation",
 			prompt: "Implement and report.",
-			definition: "general-purpose",
 			name: "worker",
 		},
 		this.state.get("context") as ExtensionContext,
