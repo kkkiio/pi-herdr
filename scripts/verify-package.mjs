@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const result = spawnSync(npmCommand, ["pack", "--dry-run", "--json", "--ignore-scripts"], {
@@ -90,6 +90,27 @@ try {
 }
 if (typeof compiledEntry.default !== "function" || typeof compiledEntry.HerdrClient !== "function") {
 	throw new Error("The compiled extension entry does not expose its default factory and HerdrClient API.");
+}
+
+// Dependency closure: pi installs distributed packages with npm --omit=dev,
+// so every bare runtime import in dist/ must be declared in dependencies.
+const declaredDependencies = new Set(Object.keys(manifest.dependencies ?? {}));
+const bareImports = new Set();
+for (const file of readdirSync(new URL("../dist/", import.meta.url))) {
+	if (!file.endsWith(".js")) continue;
+	const source = readFileSync(new URL(`../dist/${file}`, import.meta.url), "utf8");
+	for (const match of source.matchAll(/(?:from|import)\s+["']([^"']+)["']/g)) {
+		const specifier = match[1];
+		if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("node:")) continue;
+		const packageName = specifier.startsWith("@") ? specifier.split("/").slice(0, 2).join("/") : specifier.split("/")[0];
+		bareImports.add(packageName);
+	}
+}
+const undeclaredImports = [...bareImports].filter((name) => !declaredDependencies.has(name));
+if (undeclaredImports.length > 0) {
+	throw new Error(
+		`dist/ imports packages absent from dependencies (pi installs packages with npm --omit=dev): ${undeclaredImports.join(", ")}`,
+	);
 }
 
 process.stdout.write(`npm package verified (${packagedFiles.size} files).\n`);
