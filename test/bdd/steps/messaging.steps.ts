@@ -158,7 +158,7 @@ Given("a protocol 17 Herdr with one named and one unnamed target", async functio
 
 When("the Primary sends messages by name and by pane ID", async function (this: PiHerdrWorld) {
 	const supervisor = this.state.get("supervisor") as AgentSupervisor;
-	await supervisor.send("worker", "Review <raw> & reply.");
+	await supervisor.send("worker", "Review <raw> & reply.", undefined, "deepseek/deepseek-v4-flash");
 	await supervisor.send("w1:p3", "Pane-addressed follow-up.");
 });
 
@@ -169,14 +169,22 @@ Then("Herdr resolves both supplied routes", function (this: PiHerdrWorld) {
 	assert.deepEqual(lookups, [primaryAgent.pane_id, "worker", primaryAgent.pane_id, "w1:p3"]);
 });
 
-Then("each prompt prefers the target name and preserves an escaped reply envelope", function (this: PiHerdrWorld) {
+Then("each prompt prefers the target name and preserves a verbatim reply envelope", function (this: PiHerdrWorld) {
 	const prompts = (this.server?.requests ?? []).filter((request) => request.method === "agent.prompt");
 	assert.deepEqual(
 		prompts.map((request) => request.params.target),
 		["worker", "w1:p3"],
 	);
-	const opening = `<from agent="primary&amp;&quot;&lt;&gt;&apos;" reply-to="primary&amp;&quot;&lt;&gt;&apos;">`;
-	assert.equal(prompts[0]?.params.text, `${opening}\nReview <raw> & reply.`);
+	// The envelope is a text convention for the LLM reader, not parsed XML;
+	// the sender address is embedded verbatim. The first send carries the
+	// sender model and its calibration note; the second has no model.
+	const opening = `<from agent="primary&"<>'" reply-to="primary&"<>'">`;
+	assert.equal(
+		prompts[0]?.params.text,
+		`<from agent="primary&"<>'" reply-to="primary&"<>'" model="deepseek/deepseek-v4-flash">\n` +
+			`<sender-model-note>fast, but verify its conclusions before acting on them</sender-model-note>\n\n` +
+			`Review <raw> & reply.`,
+	);
 	assert.equal(prompts[1]?.params.text, `${opening}\nPane-addressed follow-up.`);
 });
 

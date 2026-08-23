@@ -119,7 +119,7 @@ Then(
 		assert.ok((system.content as string).includes("Spawned Agent managed by pi-herdr"));
 		assert.ok((system.content as string).includes("长期存活的通用 Agent"));
 		const userText = (user?.content as Array<{ type: string; text?: string }>)?.[0]?.text ?? "";
-		assert.ok(userText.startsWith('<from agent="e2e-primary" reply-to="e2e-primary">'), userText);
+		assert.ok(userText.startsWith('<from agent="e2e-primary" reply-to="e2e-primary" model="faux/faux-1">'), userText);
 		assert.ok(userText.includes(INITIAL_PROMPT), userText);
 	},
 );

@@ -48,7 +48,8 @@ export default function piHerdrExtension(pi: ExtensionAPI): void {
 		const runtime = new AgentRuntime(fileURLToPath(import.meta.url));
 		supervisor = new AgentSupervisor(client, definitions, runtime, callerPaneId);
 		const catalog = role === "primary" ? await definitions.catalog() : { entries: [], diagnostics: [] };
-		registerAgentTools(pi, supervisor, role, catalog.entries);
+		const availableModelIds = ctx.modelRegistry.getAvailable().map((model) => model.id);
+		registerAgentTools(pi, supervisor, role, catalog.entries, availableModelIds);
 		if (role === "primary") {
 			registerAgentsUi(pi, supervisor);
 			for (const diagnostic of catalog.diagnostics) ctx.ui.notify(diagnostic, "error");

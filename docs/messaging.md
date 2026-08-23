@@ -48,13 +48,16 @@ SendMessage 不提供 `steer` / `followUp` 参数。消息在目标 pi 中的实
 初始 Agent prompt 和每次 SendMessage 都使用同一个没有 closing tag 的文本 envelope：
 
 ```text
-<from agent="primary" reply-to="w1:p1">
+<from agent="primary" reply-to="w1:p1" model="openai/gpt-5.6-sol">
+<sender-model-note>rigorous, but tends to add self-justifying docs and tests</sender-model-note>
+
 这里开始全部是消息正文，直到本次 prompt 结束。
 ```
 
 - `agent` 是发送方当前 live name；没有 name 时使用发送方 pane ID。
 - `reply-to` 使用发送时可用的 live name，否则使用 pane ID。
-- attribute 值进行 XML 转义；消息正文不解析、不改写。
+- `model` 是发送方会话发送时的实时模型（`provider/id`）。发送方模型命中 pi-herdr 内置的 MODEL_NOTES 时，正文前追加一行 `<sender-model-note>` 校准提示，供接收方评估结论可信度。
+- envelope 是给 LLM 阅读的文本约定，没有解析器；尖括号内容是 pi-herdr 插入的元信息，纯文本是发送方原样正文，不解析、不改写、不转义。
 - opening tag 只标识后续文本的来源和回复目标，不执行 slash command，也不携带权限。
 
 reply address 是 live 地址。发送方关闭、移动到新 pane 或更名后，旧 reply 地址可能失效；接收方可以重新调用 `ListAgents` 查找当前目标。pi-herdr 不维护稳定的 offline reply identity。
