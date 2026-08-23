@@ -15,11 +15,11 @@ pi-herdr 需要发布 Explorer 一个开箱即用角色，并允许用户维护�
 
 Bundled definitions 位于 npm 包的 `agents/` 目录,由 YAML frontmatter 和 Markdown body 组成。Body 追加到新 Agent 的 system prompt;生命周期与消息规则由控制工具的 description 与 `promptGuidelines` 承载。投递机制见 ADR-005。
 
-运行时通过 `import.meta.url` 定位 bundled 资源。`package.json#files` 同时包含 `dist` 与 `agents`，发布检查断言两份 Markdown 进入 tarball。
+运行时通过 `import.meta.url` 定位 bundled 资源。`package.json#files` 同时包含 `dist` 与 `agents`；发布冒烟（`test/verify-package.mjs`）在干净安装中加载 catalog，验证 bundled Explorer 随包可用。
 
 ### 2. Definition selector and catalog
 
-`Agent` 使用 `definition: string`，不使用只能表达裸名称的 `agent_type`。Selector 有两种无歧义形式：
+`Agent` 使用可选的 `definition?: string`，不使用只能表达裸名称的 `agent_type`；省略时以 Pi 默认配置启动（行为见 §6）。Selector 有两种无歧义形式：
 
 - 不包含路径分隔符且不以 `.md` 结尾的名称，从 `~/.pi/agent/agents`、bundled `agents` 依次解析。
 - 以 `.md` 结尾的绝对路径或 `./`、`../` 显式相对路径，精确选择项目 definition；相对路径基于调用时的 cwd。
@@ -28,7 +28,7 @@ Bundled definitions 位于 npm 包的 `agents/` 目录,由 YAML frontmatter 和 
 
 ### 3. The caller discovers project definitions
 
-pi-herdr 不根据当前 Git root 自动选择项目角色，也不扫描外部仓库。`Agent` tool guideline 推荐调用方在项目角色有帮助时，用普通文件与 Git 工具检查任务相关项目的 `.pi/agents` 与 `.agents/agents`，然后传入选中的明确路径；没有合适项目角色时使用 catalog。项目目录检查是推荐流程，不是创建前置条件。
+pi-herdr 不根据当前 Git root 自动选择项目角色，也不扫描外部仓库。`Agent` tool guideline 推荐调用方在项目角色有帮助时，用普通文件与 Git 工具检查任务相关项目的 `.pi/agents` 与 `.agents/agents`，然后传入选中的明确路径；catalog definition 只在列出的角色恰好匹配任务时使用（如只读 Explorer 或用户自定义角色）；没有合适角色时省略 `definition`，使用 Pi 默认 agent。项目目录检查是推荐流程，不是创建前置条件。
 
 路径只选择 definition，不推断 Agent workspace 或 cwd。`Agent({ cwd })` 独立选择实际工作目录；相对 definition path 和相对 cwd 分别基于调用时的 cwd 解析，二者不互相推导或校验。角色定义的来源项目与 Agent 实际工作的项目是两个独立概念。
 

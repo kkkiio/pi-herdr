@@ -25,7 +25,7 @@ export function registerAgentTools(
 			"Launch a persistent background Agent in a new Herdr tab. Returns after startup and initial prompt delivery, not after the work finishes. Use ListAgents and SendMessage for later interaction.",
 		promptSnippet: "Launch a persistent background Agent in Herdr.",
 		promptGuidelines: [
-			"When a project-specific role would help, prefer checking the task-relevant repository's .agents/agents directories and pass the selected Markdown path explicitly; otherwise use a catalog definition.",
+			"When a project-specific role would help, prefer checking the task-relevant repository's .agents/agents directories and pass the selected Markdown path explicitly. Use a catalog definition only when one of the listed roles fits the task; otherwise omit `definition` to use the Pi default agent.",
 			...(modelNotes ? [modelNotes] : []),
 		],
 		parameters: Type.Object(
