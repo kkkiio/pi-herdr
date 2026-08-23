@@ -69,14 +69,6 @@ When changing an Accepted design before the first npm release, make the direct m
 
 When implementation disagrees with an Accepted ADR because a platform API behaves differently, update the ADR and user documentation in the same change. Keep detailed lifecycle and error semantics in `docs/`; keep README focused on getting started plus the user-facing Herdr RPC support matrix.
 
-### Code Design
-
-When adding TypeScript implementation, follow _A Philosophy of Software Design_: prefer deep modules with small public surfaces, keep substantial functions at least 20 lines when the logic belongs together, and prefer established library helpers over custom helper proliferation.
-
-When a formatter changes files in scope, keep its output. Do not manually roll back formatter-owned changes.
-
-Do not run `git diff --check` in this repository.
-
 ## Operation Guide
 
 ### Setup and Canonical Commands
