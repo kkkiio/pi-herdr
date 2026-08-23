@@ -102,7 +102,9 @@ for (const file of readdirSync(new URL("../dist/", import.meta.url))) {
 	for (const match of source.matchAll(/(?:from|import)\s+["']([^"']+)["']/g)) {
 		const specifier = match[1];
 		if (specifier.startsWith(".") || specifier.startsWith("/") || specifier.startsWith("node:")) continue;
-		const packageName = specifier.startsWith("@") ? specifier.split("/").slice(0, 2).join("/") : specifier.split("/")[0];
+		const packageName = specifier.startsWith("@")
+			? specifier.split("/").slice(0, 2).join("/")
+			: specifier.split("/")[0];
 		bareImports.add(packageName);
 	}
 }
