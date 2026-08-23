@@ -50,14 +50,14 @@ pi-herdr 只封装后台 Agent 工作流需要的 Herdr 能力，不替代 Herdr
 | ------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------- |
 | `Agent`                         | `tab.create` / `worktree.create`, `agent.start`, `agent.prompt` | 在独立 tab 中启动持久 Agent，可选择共享目录或独立 Git worktree |
 | `ListAgents`, `SendMessage`     | `agent.list`, `agent.get`, `agent.prompt`                     | 发现并联系 live Agent 或 Pi peer；不提供离线消息队列           |
-| `/name`, `StopAgent`            | `agent.rename`, `tab.rename`, `pane.close`                    | 同步 Agent 名称；停止 Agent 时保留 session 和 worktree         |
+| `/name`                         | `agent.rename`, `tab.rename`                                | 同步 Agent 名称；停止 Agent 直接用 Herdr 关闭 pane/tab          |
 | 其他 Herdr 管理能力             | 其余 `workspace.*`、`tab.*`、`pane.*`、`worktree.*`、`layout.*` | 不由 pi-herdr 封装，直接使用 Herdr                              |
 
 协议兼容性和连接行为见 [Herdr RPC integration](docs/herdr-rpc.md)。
 
 ## Documentation
 
-- [Spawned Agent contract](docs/spawned-agent-contract.md) — Agent 的创建、生命周期、隔离与停止行为。
+- [Agent contract](docs/agent-contract.md) — Agent 的创建、生命周期、隔离与停止行为。
 - [Agent definitions](docs/agent-definitions.md) — 使用内置角色或定义项目角色。
 - [Messaging](docs/messaging.md) — 发现 Agent、发送消息与回复。
 - [Herdr RPC integration](docs/herdr-rpc.md) — Herdr 版本、协议和 RPC 边界。

@@ -18,20 +18,20 @@ pi-herdr 是 TypeScript ESM Pi extension。
 ├── .github/
 │   └── workflows/ci.yml                   # main push/PR 全量回归 CI
 ├── docs/
-│   ├── spawned-agent-contract.md          # 创建、双模式、name、持久性与停止语义
+│   ├── agent-contract.md                  # 创建、统一工具表面、name、持久性与生命周期
 │   ├── messaging.md                       # ListAgents、SendMessage 与 reply
 │   ├── agent-definitions.md               # Markdown frontmatter 用户参考
 │   ├── herdr-rpc.md                       # Socket protocol、事件、重试与 RPC 边界
 │   └── adr/                               # Accepted 设计决策；修改 lifecycle/messaging/transport/naming 行为前先读对应 ADR
 │       ├── 001-persistent-background-agents.md  # Agent = herdr tab 中后台持久的 Pi session；不复活、不建信箱
-│       ├── 002-default-model-selection.md       # 模型解析：显式参数 > definition > 继承 Primary
+│       ├── 002-default-model-selection.md       # 模型解析：显式参数 > definition > 继承调用方
 │       ├── 003-agent-definitions.md             # 显式项目 definition 选择 + 单扩展双角色
 │       ├── 004-herdr-socket-integration.md      # Protocol 17：独立 RPC socket、事件流重连与 snapshot 对账
 │       └── 005-file-path-prompt-delivery.md     # 短 argv 纪律；prompt 走文件路径与 promptGuidelines
 ├── scripts/
 │   └── verify-package.mjs                 # npm dry-run 打包清单与编译入口 smoke 校验
 ├── src/
-│   ├── index.ts                           # 单 extension 入口与 Primary/Spawned 装配
+│   ├── index.ts                           # 单 extension 入口与工具装配
 │   ├── agent-definitions.ts               # Definition catalog、显式路径与严格 YAML 解析
 │   ├── agent-runtime.ts                   # Pi 启动参数、模型、prompt 与 rename
 │   ├── agent-supervisor.ts                # Live ownership、创建事务与工具语义
@@ -48,14 +48,14 @@ pi-herdr 是 TypeScript ESM Pi extension。
 
 ## Domain Language
 
-- **Primary Agent** — 调用 `Agent` 工具创建另一个持久 Agent 的 pi 会话。
-- **Spawned Agent** — 由 pi-herdr 创建、拥有独立 tab 和持久 pi session 的后台 Agent。
-- **Agent definition** — 用户级/bundled catalog 中按名称选择，或由 Primary 从项目 `.pi/agents`、`.agents/agents` 显式选择路径的角色配置与 prompt。
+- **Agent** — 在 herdr tab 的受管 pane 中运行的持久后台 pi 会话；由另一个会话通过 `Agent` 工具创建，能力与创建者相同。
+- **Creator / 创建者** — 调用 `Agent` 工具创建另一个 Agent 的会话；创建只是内存中的事实记录，不带来管理权限。
+- **Agent definition** — 用户级/bundled catalog 中按名称选择，或由调用方从项目 `.pi/agents`、`.agents/agents` 显式选择路径的角色配置与 prompt。
 - **Agent name** — 同时用作 pi session name、herdr live Agent alias 和 tab label；live 时可通过 `/name` 同步修改。
-- **Agent tab** — 一个 spawned Agent 在 herdr 中的用户可见容器。
+- **Agent tab** — 一个 Agent 在 herdr 中的用户可见容器。
 - **Managed pane** — Agent tab 内实际运行 pi 进程、承载 herdr lifecycle state 的 pane。
-- **Peer** — herdr 当前可达、但不是由本次 pi-herdr runtime 管理的其他 pi 会话。
-- **createdBy** — 当前 Primary 进程为自己创建的 live Agent 附加的内存元数据，不是持久身份或通信边界。
+- **Peer** — herdr 当前可达、但不是由当前会话创建的其他 pi 会话。
+- **createdBy** — 当前进程为自己创建的 live Agent 附加的内存元数据，不是持久身份或通信边界。
 - **Reply address** — 入站消息携带的 live `SendMessage` 返回地址，可能在 rename、pane 变化或关闭后失效。
 - **Persistent session** — 正常落盘、在 Agent idle 时继续使用，并可由用户通过原生 pi 管理的 session。
 

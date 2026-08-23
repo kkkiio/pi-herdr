@@ -187,35 +187,3 @@ Then("each prompt prefers the target name and preserves a verbatim reply envelop
 	);
 	assert.equal(prompts[1]?.params.text, `${opening}\nPane-addressed follow-up.`);
 });
-
-Given("a protocol 17 Herdr whose requested stop target is the caller", async function (this: PiHerdrWorld) {
-	const handler: RequestHandler = (request, socket, server) => {
-		if (request.method === "pane.current") {
-			server.reply(socket, request, { type: "pane_current", pane: { pane_id: primaryAgent.pane_id } });
-			return;
-		}
-		if (request.method === "agent.get") {
-			server.reply(socket, request, { type: "agent_info", agent: primaryAgent });
-			return;
-		}
-		server.reject(socket, request, "unexpected_mutation", `Unexpected BDD method ${request.method}`);
-	};
-	await installSupervisor(this, handler, () => [primaryAgent]);
-});
-
-When("the Primary tries to stop itself", async function (this: PiHerdrWorld) {
-	const supervisor = this.state.get("supervisor") as AgentSupervisor;
-	try {
-		await supervisor.stop("primary");
-		assert.fail("Expected self stop to fail.");
-	} catch (error) {
-		this.state.set("stopError", error);
-	}
-});
-
-Then("StopAgent rejects the self stop without closing a pane", function (this: PiHerdrWorld) {
-	const error = this.state.get("stopError");
-	assert.ok(error instanceof Error);
-	assert.match(error.message, /cannot close the calling Agent's own pane/);
-	assert.equal(this.server?.requests.filter((request) => request.method === "pane.close").length, 0);
-});

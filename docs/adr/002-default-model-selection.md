@@ -5,7 +5,7 @@
 
 ## Context
 
-长期 live Explorer 会被多次复用。如果它总是以 Primary 的高成本模型启动，简单只读搜索可能产生不必要成本；General Purpose Agent 通常更适合继承 Primary 能力。
+长期 live Explorer 会被多次复用。如果它总是以 调用方的高成本模型启动，简单只读搜索可能产生不必要成本；General Purpose Agent 通常更适合继承调用方能力。
 
 模型配置只需要决定新 session 的初始状态。Agent 启动后，用户仍应保留 pi 原生 `/model` 等控制能力，而不是由 pi-herdr 锁定模型。
 
@@ -25,15 +25,15 @@ model:
 
 ### 2. Explorer 与 General Purpose 默认值
 
-Bundled explorer 优先使用 `gpt-5.6-luna`，其次使用 `deepseek-v4-flash`。Definition 候选均不可用时继承 Primary 当前模型。
+Bundled explorer 优先使用 `gpt-5.6-luna`，其次使用 `deepseek-v4-flash`。Definition 候选均不可用时继承调用方当前模型。
 
-Bundled general-purpose 不指定 model，因此初始模型直接继承 Primary 当前模型。
+Bundled general-purpose 不指定 model，因此初始模型直接继承调用方当前模型。
 
 ### 3. Selection precedence
 
 1. `Agent({ model })` 显式参数。
 2. 当前选中的 definition 中的候选。
-3. Primary 当前模型。
+3. 调用方当前模型。
 
 Definition 在创建时固定；已有 Agent 不因 Markdown 文件变化而重新解析模型。
 
@@ -41,7 +41,7 @@ Definition 在创建时固定；已有 Agent 不因 Markdown 文件变化而重�
 
 候选模型必须已经认证、存在于 pi model registry，并符合当前 session 的 scoped/enabled models。候选按 model ID 匹配，把 `.` 与 `-` 视为等价；多个 provider 命中时使用 registry 顺序中的第一个可用项。
 
-显式 `Agent({ model })` 表达调用方确定意图，因此其候选全部不可用时创建失败。Definition 的默认候选只是偏好，其候选全部不可用时静默继承 Primary 模型。
+显式 `Agent({ model })` 表达调用方确定意图，因此其候选全部不可用时创建失败。Definition 的默认候选只是偏好，其候选全部不可用时静默继承调用方模型。
 
 ### 5. Model is mutable after launch
 
@@ -53,7 +53,7 @@ pi-herdr 不监听或回滚模型变化，也不要求为不同模型创建新 A
 
 | Alternative                  | Why not chosen                                 |
 | ---------------------------- | ---------------------------------------------- |
-| 所有 Agent 继承 Primary 模型 | Explorer 会持续消耗不必要的高价模型 token      |
+| 所有 Agent 继承调用方模型 | Explorer 会持续消耗不必要的高价模型 token      |
 | 固定 provider/model          | 用户未必安装、启用或认证对应 provider          |
 | 显式 model 失败时静默回退    | 会掩盖调用参数拼写错误或违反调用方明确意图     |
 | 创建后锁定模型               | 限制 pi 原生交互能力，并需要额外拦截与回滚逻辑 |

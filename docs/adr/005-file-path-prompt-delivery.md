@@ -5,7 +5,7 @@
 
 ## Context
 
-pi-herdr 通过 Herdr `agent.start` 启动 Spawned Pi,而 Herdr 的实现是把 quoting 后的命令行**打字进目标 pane 的交互 shell**。真实 Herdr e2e(`@herdr-e2e`)暴露出:当命令行超过约 1024 字节(macOS tty 输入队列上限)时,投递被**静默截断**——CLI 报成功,shell 收到残缺命令,agent 永不启动(上游 issue herdrdev/herdr#2862,0.7.5/0.8.0、sh/zsh 均复现)。
+pi-herdr 通过 Herdr `agent.start` 启动新 Pi,而 Herdr 的实现是把 quoting 后的命令行**打字进目标 pane 的交互 shell**。真实 Herdr e2e(`@herdr-e2e`)暴露出:当命令行超过约 1024 字节(macOS tty 输入队列上限)时,投递被**静默截断**——CLI 报成功,shell 收到残缺命令,agent 永不启动(上游 issue herdrdev/herdr#2862,0.7.5/0.8.0、sh/zsh 均复现)。
 
 pi-herdr 原先把共享生命周期规则和 `Role-specific instructions:` 前缀加 definition 正文拼接成两个内联 `--append-system-prompt` 参数,完整 launch 命令约 1.7KB,必踩截断。FakeHerdrServer 回归测不到投递层,该缺陷由真机 e2e 发现。
 
@@ -15,15 +15,15 @@ pi-herdr 原先把共享生命周期规则和 `Role-specific instructions:` 前�
 
 ### 1. Launch argv 只携带短 ASCII flag
 
-`AgentRuntime.resolveLaunchPlan` 生成的参数只剩 `--name`、`--extension`、`--pi-herdr-role`、`--model`、`--thinking`、`--tools`、`--exclude-tools`、`--no-extensions`、`--no-skills`,总量约 300 字节,远离 tty 阈值。任何长文本一律不作为内联 argv 传递。definition 绝对路径长度随用户目录布局变化且多字节字符最高占 3 UTF-8 字节,阈值无法靠构造保证,因此 `resolveLaunchPlan` 对最终 argv 做字节预算检查(960 字节,含 quoting 余量),超限时 fail fast 并建议改用更短路径或 catalog 名称,而不是放任静默截断。
+`AgentRuntime.resolveLaunchPlan` 生成的参数只剩 `--name`、`--extension`、`--model`、`--thinking`、`--tools`、`--exclude-tools`、`--no-extensions`、`--no-skills`,总量约 300 字节,远离 tty 阈值。任何长文本一律不作为内联 argv 传递。definition 绝对路径长度随用户目录布局变化且多字节字符最高占 3 UTF-8 字节,阈值无法靠构造保证,因此 `resolveLaunchPlan` 对最终 argv 做字节预算检查(960 字节,含 quoting 余量),超限时 fail fast 并建议改用更短路径或 catalog 名称,而不是放任静默截断。
 
 ### 2. 生命周期与消息规则迁入工具的 description 与 `promptGuidelines`
 
-原共享 system prompt 的内容是 `SendMessage`/`ListAgents` 的使用契约(envelope 格式、reply-to 回复、回复后保持空闲),Pi 会把注册工具的 `promptGuidelines` 组合进 system prompt 的 Guidelines 段,这是 Pi 内置工具(bash/read/edit/write)使用的原生通道。"不能创建/停止 Agent" 条款删除——Spawned 角色不注册这两个工具,能力缺席自明。
+原共享 system prompt 的内容是 `SendMessage`/`ListAgents` 的使用契约(envelope 格式、reply-to 回复、回复后保持空闲),Pi 会把注册工具的 `promptGuidelines` 组合进 system prompt 的 Guidelines 段,这是 Pi 内置工具(bash/read/edit/write)使用的原生通道。"不能创建/停止 Agent" 条款删除——停止工具已整体移除,递归创建不做限制(见 ADR-003 第 5 条)。
 
 ### 3. 角色指令通过 `--append-system-prompt <definition 绝对路径>` 传递
 
-Definition 在任何来源(bundled、全局目录、显式路径)都已经是磁盘上的 Markdown 文件,`AgentDefinitionStore` 解析后持有绝对路径。Spawned Pi 启动时自己读文件,Primary 侧的解析与严格校验(disabled、malformed、未知字段)不变。
+Definition 在任何来源(bundled、全局目录、显式路径)都已经是磁盘上的 Markdown 文件,`AgentDefinitionStore` 解析后持有绝对路径。新 Pi 启动时自己读文件,调用方一侧的解析与严格校验(disabled、malformed、未知字段)不变。
 
 ### 4. 接受 frontmatter 原样进入 system prompt
 
@@ -37,7 +37,7 @@ Definition 在任何来源(bundled、全局目录、显式路径)都已经是磁
 
 不使用 `--system-prompt`:它会整体替换 Pi 默认的 coding-assistant prompt,而 pi-herdr 的语义是追加角色行为。
 
-本 ADR 修订 ADR-003 第 1 条的投递机制:definition body 仍然追加到 Spawned system prompt,但通道从内联 argv 文本改为文件路径;控制面规则从共享 system prompt 文本块迁为工具 description/`promptGuidelines`。
+本 ADR 修订 ADR-003 第 1 条的投递机制:definition body 仍然追加到新 Agent 的 system prompt,但通道从内联 argv 文本改为文件路径;控制面规则从共享 system prompt 文本块迁为工具 description/`promptGuidelines`。
 
 ## Alternatives
 
@@ -56,14 +56,14 @@ Definition 在任何来源(bundled、全局目录、显式路径)都已经是磁
 
 - Launch argv 约 300 字节,不受 tty 截断影响;definition 正文不再经过 shell quoting,中文与特殊字符零风险。
 - 无临时文件;definition 文件改动不需要 pi-herdr 重新编码。
-- 工具契约与工具定义同处,Primary/Spawned 两个角色的 guidelines 可按角色分化。
+- 工具契约与工具定义同处,所有会话共享同一份 guidelines。
 - `@herdr-e2e` 覆盖真实投递路径,回归可信。
 
 ### Negative
 
 - Definition 的 frontmatter 元数据进入 system prompt,增加少量 token 与噪声。
-- Definition 文件必须在 Spawned Pi 存活期间保持可读(Pi reload resources 时会重读);删除或移动文件会使重读退化。
-- 共享规则只在工具注册时随 `promptGuidelines` 出现;若未来出现不含这两个工具的 Spawned 形态,契约需要新的载体。
+- Definition 文件必须在新 Pi 存活期间保持可读(Pi reload resources 时会重读);删除或移动文件会使重读退化。
+- 共享规则只在工具注册时随 `promptGuidelines` 出现;若未来出现不含这两个工具的会话形态,契约需要新的载体。
 
 ### Unresolved
 
