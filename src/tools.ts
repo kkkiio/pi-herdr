@@ -1,9 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-import type { AgentSupervisor } from "./agent-supervisor.js";
 import type { AgentDefinitionCatalogEntry } from "./agent-definitions.js";
 import { THINKING_LEVELS } from "./agent-runtime.js";
+import type { AgentSupervisor } from "./agent-supervisor.js";
+import { availableModelNotes } from "./model-notes.js";
 
 export type RuntimeRole = "primary" | "spawned";
 
@@ -12,8 +13,10 @@ export function registerAgentTools(
 	supervisor: AgentSupervisor,
 	role: RuntimeRole,
 	catalog: readonly AgentDefinitionCatalogEntry[] = [],
+	availableModelIds: readonly string[] = [],
 ): void {
 	const thinkingSchema = Type.Union(THINKING_LEVELS.map((level) => Type.Literal(level)));
+	const modelNotes = availableModelNotes(availableModelIds);
 	if (role === "primary") {
 		const catalogDescription = catalog.length
 			? catalog.map((entry) => `${entry.name}${entry.description ? ` — ${entry.description}` : ""}`).join("; ")
@@ -25,9 +28,8 @@ export function registerAgentTools(
 				"Launch a persistent background Agent in a new Herdr tab. Returns after startup and initial prompt delivery, not after the work finishes. Use ListAgents and SendMessage for later interaction.",
 			promptSnippet: "Launch a persistent background Agent in Herdr.",
 			promptGuidelines: [
-				"Give every Agent a unique lowercase name matching [a-z][a-z0-9_-]{0,31}.",
-				"When a project-specific role would help, prefer checking the task-relevant repository's .pi/agents and .agents/agents directories and pass the selected Markdown path explicitly; otherwise use a catalog definition.",
-				"Use isolation=worktree only when the Agent needs an independent Git checkout.",
+				"When a project-specific role would help, prefer checking the task-relevant repository's .agents/agents directories and pass the selected Markdown path explicitly; otherwise use a catalog definition.",
+				...(modelNotes ? [modelNotes] : []),
 			],
 			parameters: Type.Object(
 				{
@@ -126,8 +128,9 @@ export function registerAgentTools(
 			},
 			{ additionalProperties: false },
 		),
-		execute: async (_toolCallId, params, signal) => {
-			const result = await supervisor.send(params.agent, params.message, signal);
+		execute: async (_toolCallId, params, signal, _onUpdate, ctx) => {
+			const senderModel = ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
+			const result = await supervisor.send(params.agent, params.message, signal, senderModel);
 			return {
 				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
 				details: result,
