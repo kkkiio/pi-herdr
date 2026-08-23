@@ -67,10 +67,10 @@ Primary 与 Spawned 运行同一个 pi-herdr extension 入口。Primary 默认�
 
 extension 通过 `registerFlag` 注册该参数，并在 `session_start` 时用 `getFlag` 选择工具表面：
 
-- Primary 模式注册 `Agent`、`StopAgent`、`ListAgents`、`SendMessage` 和用户 UI。
+- Primary 模式注册 `Agent`、`ListAgents`、`SendMessage` 和用户 UI。
 - Spawned 模式只注册 `ListAgents`、`SendMessage` 和 name 同步逻辑。
 
-因此 Spawned Agent 不能递归创建 Agent 或停止其他 runtime。Definition 加载的普通 extensions 与 skills 不改变 pi-herdr 自己的工具表面。
+因此 Spawned Agent 不能递归创建 Agent。Definition 加载的普通 extensions 与 skills 不改变 pi-herdr 自己的工具表面。
 
 共享 workspace 与 worktree 使用完全相同的 role flag。`worktree.create` 没有环境变量参数，role 不通过 worktree env 传递。
 
@@ -129,34 +129,7 @@ starting/working/blocked/idle/done/unknown -> closed
 
 工具结果保留 Herdr 原始 `AgentInfo.agent_status`：`idle`、`working`、`blocked`、`done` 和 `unknown`。`done` 不表示 runtime 已终止；`/agents` 可以在展示层把它归入 idle，但不会改写工具数据。只有 pane、tab 或进程消失才结束 pi-herdr 管理。
 
-## StopAgent
-
-Primary Agent 可以停止任意其他 live Agent 或 peer：
-
-```typescript
-StopAgent({
-  agent: string,
-}) => {
-  stopped: true,
-  agent: AgentInfo,
-}
-```
-
-`agent` 接受唯一 live name 或当前 pane ID。pi-herdr 在关闭前取得目标 `AgentInfo`，拒绝目标 pane 等于调用者 pane，然后只调用目标的 `pane.close`。它不删除 Pi session、tab 中的其他 pane 或 worktree，也不负责 Git 合并和资源清理。
-
-## Capacity
-
-每个 Primary 进程只统计自己创建且仍 live 的 Agent。默认上限为 16，可在 Pi settings 中配置：
-
-```json
-{
-  "piHerdr": {
-    "maxMembers": 32
-  }
-}
-```
-
-`maxMembers` 接受任意正整数；项目 settings 覆盖全局 settings。非法值产生配置诊断并阻止新的 `Agent` 创建，但不影响 `ListAgents`、`SendMessage` 或 `StopAgent`。Primary 重启后计数重新开始，多个 Primary 的进程内上限彼此独立。
+pi-herdr 不提供停止工具。停止 Agent 由用户直接通过 Herdr 关闭 pane/tab；session 与 worktree 由 Herdr 语义保留。
 
 ## User Command
 

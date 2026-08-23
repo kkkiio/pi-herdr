@@ -63,27 +63,6 @@ export function registerAgentTools(
 				};
 			},
 		});
-
-		pi.registerTool({
-			name: "StopAgent",
-			label: "Stop Agent",
-			description:
-				"Stop another live Agent or peer by closing only its managed Herdr pane. This preserves its Pi session and worktree and refuses to stop the caller.",
-			promptSnippet: "Stop another live Agent or peer without deleting its session.",
-			parameters: Type.Object(
-				{
-					agent: Type.String({ minLength: 1, description: "Live Agent name or pane ID." }),
-				},
-				{ additionalProperties: false },
-			),
-			execute: async (_toolCallId, params, signal) => {
-				const result = await supervisor.stop(params.agent, signal);
-				return {
-					content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-					details: result,
-				};
-			},
-		});
 	}
 
 	pi.registerTool({

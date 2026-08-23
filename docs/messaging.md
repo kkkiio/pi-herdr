@@ -83,7 +83,7 @@ SendMessage({
 - socket 断线时只自动重试 `ping`、`session.snapshot`、`agent.list`、`agent.get` 等幂等读取。
 - `agent.prompt`、`agent.start`、rename、close 等 mutating RPC 不自动重放，避免重复提交或重复操作。
 
-消息不会提升接收方权限，也不能代替用户批准。Spawned 模式始终拥有 `ListAgents` 和 `SendMessage`，但不拥有 `Agent` 或 `StopAgent`。
+消息不会提升接收方权限，也不能代替用户批准。Spawned 模式始终拥有 `ListAgents` 和 `SendMessage`，但不拥有 `Agent`。
 
 ## External References
 

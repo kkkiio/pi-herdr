@@ -12,8 +12,3 @@ Feature: Live Agent discovery and messaging
     When the Primary sends messages by name and by pane ID
     Then Herdr resolves both supplied routes
     And each prompt prefers the target name and preserves a verbatim reply envelope
-
-  Scenario: StopAgent cannot close its caller
-    Given a protocol 17 Herdr whose requested stop target is the caller
-    When the Primary tries to stop itself
-    Then StopAgent rejects the self stop without closing a pane

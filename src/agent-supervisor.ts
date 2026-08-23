@@ -35,7 +35,6 @@ function currentModelId(ctx: ExtensionContext): string | undefined {
 }
 
 interface SupervisorConfiguration {
-	maxMembers: number;
 	sessionDirectory: string | undefined;
 }
 
@@ -142,16 +141,8 @@ export class AgentSupervisor {
 		if (agentsResult.agents.some((agent) => agent.name === request.name)) {
 			throw new Error(`A live Agent or peer already uses the name ${request.name}.`);
 		}
-		if (
-			this.launchReservations.has(request.name) ||
-			this.owned.size + this.launchReservations.size >= configuration.maxMembers
-		) {
-			if (this.launchReservations.has(request.name)) {
-				throw new Error(`An Agent named ${request.name} is already being launched by this Primary Agent.`);
-			}
-			throw new Error(
-				`piHerdr.maxMembers is ${configuration.maxMembers}; this Primary Agent already owns or is launching ${this.owned.size + this.launchReservations.size} live Agents.`,
-			);
+		if (this.launchReservations.has(request.name)) {
+			throw new Error(`An Agent named ${request.name} is already being launched by this Primary Agent.`);
 		}
 		this.launchReservations.add(request.name);
 
@@ -432,30 +423,6 @@ export class AgentSupervisor {
 		return { delivered: true, agent: result.agent };
 	}
 
-	async stop(target: string, signal?: AbortSignal): Promise<{ stopped: true; agent: AgentInfo }> {
-		if (typeof target !== "string" || !target.trim()) throw new Error("agent must contain a live name or pane ID.");
-		await this.initialize();
-		if (signal?.aborted) throw new Error("Agent stop was cancelled before target resolution.");
-		const [callerResult, targetResult] = await Promise.all([
-			this.client.requestRead(
-				"pane.current",
-				{
-					caller_pane_id: this.callerPaneId,
-				},
-				signal,
-			),
-			this.client.requestRead("agent.get", { target }, signal),
-		]);
-		if (callerResult.pane.pane_id === targetResult.agent.pane_id) {
-			throw new Error("StopAgent cannot close the calling Agent's own pane.");
-		}
-		if (signal?.aborted) throw new Error("Agent stop was cancelled before pane.close.");
-		await this.client.requestMutation("pane.close", { pane_id: targetResult.agent.pane_id });
-		this.owned.delete(targetResult.agent.pane_id);
-		this.client.updateTrackedPanes([...this.owned.keys()]);
-		return { stopped: true, agent: targetResult.agent };
-	}
-
 	private reconcile(snapshot: SessionSnapshot, ownedBeforeRead: ReadonlySet<string>): void {
 		if (snapshot.protocol !== 17) {
 			this.initialized = false;
@@ -579,7 +546,6 @@ export class AgentSupervisor {
 			? resolve(cwd, expandedAgentDirectory)
 			: join(homedir(), ".pi", "agent");
 		const paths = [join(agentDirectory, "settings.json"), join(cwd, ".pi", "settings.json")];
-		let configured: unknown;
 		let sessionDirectory: string | undefined;
 		for (const path of paths) {
 			let text: string;
@@ -606,17 +572,7 @@ export class AgentSupervisor {
 				}
 				sessionDirectory = typeof value === "string" && value.length > 0 ? value : undefined;
 			}
-			const section = settingsRecord.piHerdr;
-			if (section === undefined) continue;
-			if (typeof section !== "object" || section === null || Array.isArray(section)) {
-				throw new Error(`Pi setting piHerdr in ${path} must be an object.`);
-			}
-			if (Object.hasOwn(section, "maxMembers")) configured = (section as Record<string, unknown>).maxMembers;
 		}
-		if (configured === undefined) return { maxMembers: 16, sessionDirectory };
-		if (typeof configured !== "number" || !Number.isInteger(configured) || configured <= 0) {
-			throw new Error("Pi setting piHerdr.maxMembers must be a positive integer.");
-		}
-		return { maxMembers: configured, sessionDirectory };
+		return { sessionDirectory };
 	}
 }

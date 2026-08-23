@@ -35,8 +35,8 @@ When("pi-herdr registers Primary and Spawned control tools", function (this: PiH
 	this.state.set("spawnedTools", spawned);
 });
 
-Then("Primary has Agent, StopAgent, ListAgents, and SendMessage", function (this: PiHerdrWorld) {
-	assert.deepEqual(this.state.get("primaryTools"), ["Agent", "StopAgent", "ListAgents", "SendMessage"]);
+Then("Primary has Agent, ListAgents, and SendMessage", function (this: PiHerdrWorld) {
+	assert.deepEqual(this.state.get("primaryTools"), ["Agent", "ListAgents", "SendMessage"]);
 });
 
 Then("Spawned has only ListAgents and SendMessage", function (this: PiHerdrWorld) {
@@ -125,13 +125,13 @@ When("real Pi RPC starts once as Primary and once as Spawned", async function (t
 });
 
 Then(
-	"the Primary RPC session exposes exactly four pi-herdr tools and the agents command",
+	"the Primary RPC session exposes exactly three pi-herdr tools and the agents command",
 	function (this: PiHerdrWorld) {
 		const observation = this.state.get("primaryRpcSurface") as PiSurfaceObservation;
-		assert.deepEqual(observation.activeTools, ["Agent", "StopAgent", "ListAgents", "SendMessage"]);
+		assert.deepEqual(observation.activeTools, ["Agent", "ListAgents", "SendMessage"]);
 		assert.deepEqual(
-			observation.allTools.filter((name) => ["Agent", "StopAgent", "ListAgents", "SendMessage"].includes(name)),
-			["Agent", "StopAgent", "ListAgents", "SendMessage"],
+			observation.allTools.filter((name) => ["Agent", "ListAgents", "SendMessage"].includes(name)),
+			["Agent", "ListAgents", "SendMessage"],
 		);
 		assert.ok(observation.commands.some((command) => command.name === "agents" && command.source === "extension"));
 		assert.ok(observation.rpcCommands.some((command) => command.name === "agents" && command.source === "extension"));
@@ -142,7 +142,7 @@ Then("the Spawned RPC session exposes exactly two pi-herdr tools and no agents c
 	const observation = this.state.get("spawnedRpcSurface") as PiSurfaceObservation;
 	assert.deepEqual(observation.activeTools, ["ListAgents", "SendMessage"]);
 	assert.deepEqual(
-		observation.allTools.filter((name) => ["Agent", "StopAgent", "ListAgents", "SendMessage"].includes(name)),
+		observation.allTools.filter((name) => ["Agent", "ListAgents", "SendMessage"].includes(name)),
 		["ListAgents", "SendMessage"],
 	);
 	assert.equal(

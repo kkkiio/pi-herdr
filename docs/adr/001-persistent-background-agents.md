@@ -44,15 +44,9 @@ Primary 重启会丢失创建来源内存。仍在 herdr 中运行的旧 Agent �
 
 Socket 重连只通过 live snapshot 删除失效记录、刷新仍存在的 runtime，不从 session 文件重建 ownership。Snapshot 与 `agent.list` reconciliation 只能处理各自读取开始前已经存在的 ownership key，延迟响应不能删除并发创建成功的新记录。
 
-### 6. Capacity 是 per-Primary 安全阀
+### 6. Stop 与资源保留分离
 
-Pi settings 的 `piHerdr.maxMembers` 默认 16，接受任意正整数。每个 Primary 只统计自己当前进程创建且仍 live 的 Agent；多个 Primary 可以共同超过该值。
-
-非法值产生诊断并阻止新 Agent 创建，但不影响 discovery、messaging 或 stop。该限制用于阻止单个 Primary 的错误 spawn 循环，不是 workspace-wide 调度或全局配额。
-
-### 7. Stop 与资源保留分离
-
-`StopAgent` 接受唯一 live name 或 pane ID，可以关闭任意其他 Agent/peer 的宿主 pane，但禁止关闭调用者自身。它只调用 `pane.close`，不关闭 tab 中其他 pane，也不删除 session 或 worktree。
+pi-herdr 不提供停止工具。停止 Agent 由用户直接通过 Herdr 关闭 pane/tab，session 与 worktree 由 Herdr 语义保留。
 
 常规 worktree 合并与清理由 Primary 在用户指示下使用原生 Git/Herdr 完成。pi-herdr 只在 Agent 创建失败回滚时以 `force: false` 先尝试移除本次新建的 worktree；安全移除失败后再关闭本次 pane。只有 runtime 已确认关闭，且 launch 已产生可验证的 `herdr:pi` session、绝对 `.jsonl` path 位于配置的 Pi session tree 内时，才删除这个精确文件。close 结果不确定或其他清理无法验证时保留现场并报告残留资源。
 

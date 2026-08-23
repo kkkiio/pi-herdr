@@ -4,7 +4,7 @@ Feature: Runtime roles and Agent definitions
   Scenario: Primary and Spawned roles have exact control tool surfaces
     Given a Pi tool registration recorder
     When pi-herdr registers Primary and Spawned control tools
-    Then Primary has Agent, StopAgent, ListAgents, and SendMessage
+    Then Primary has Agent, ListAgents, and SendMessage
     And Spawned has only ListAgents and SendMessage
 
   Scenario: Outside Herdr the extension is silent
@@ -15,7 +15,7 @@ Feature: Runtime roles and Agent definitions
   Scenario: Real Pi RPC parses the role flag and loads the extension surface
     Given a fake protocol 17 Herdr for real Pi RPC sessions
     When real Pi RPC starts once as Primary and once as Spawned
-    Then the Primary RPC session exposes exactly four pi-herdr tools and the agents command
+    Then the Primary RPC session exposes exactly three pi-herdr tools and the agents command
     And the Spawned RPC session exposes exactly two pi-herdr tools and no agents command
 
   Scenario: A malformed global definition never falls through to bundled catalog entries

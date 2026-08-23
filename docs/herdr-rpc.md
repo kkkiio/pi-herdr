@@ -58,4 +58,4 @@ pi-herdr 只自动重试不会产生副作用的读取：`ping`、`session.snaps
 | Caller lookup                        | `pane.current`                                                                       |
 | State and reconnect                  | `events.subscribe`, `session.snapshot`                                               |
 
-pi-herdr 对 Pi 只暴露 `Agent`、`StopAgent`、`ListAgents` 和 `SendMessage`，不包装通用 workspace、tab、pane、layout、terminal input、agent wait/read/focus、worktree cleanup、plugin/server/integration 或 notification 管理能力。
+pi-herdr 对 Pi 只暴露 `Agent`、`ListAgents` 和 `SendMessage`，不包装通用 workspace、tab、pane、layout、terminal input、agent wait/read/focus、worktree cleanup、plugin/server/integration 或 notification 管理能力。

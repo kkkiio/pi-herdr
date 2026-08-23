@@ -57,7 +57,7 @@ Frontmatter 是封闭 schema，表格之外的字段全部报错。Agent 始终�
 
 Primary 与 Spawned 显式加载同一个 pi-herdr extension。创建 Agent 时通过 extension flag/启动参数注入 Spawned role：
 
-- Primary 注册 `Agent`、`StopAgent`、`ListAgents`、`SendMessage` 与 UI。
+- Primary 注册 `Agent`、`ListAgents`、`SendMessage` 与 UI。
 - Spawned 只注册 `ListAgents`、`SendMessage` 与 name 同步。
 
 角色判断发生在同一个入口，不通过“工具可见但执行时报权限错误”模拟权限。普通 extension/skill 发现不能使 Spawned 获得 pi-herdr 的 Primary 工具。
@@ -81,7 +81,7 @@ General Purpose 使用 `tools: [all]`、`extensions: true`、`skills: true`，�
 | pi-herdr 扫描已知仓库并维护项目 catalog | 重复 Primary 已有的文件搜索能力，还需要额外索引、缓存和刷新语义 |
 | Definition 显式加载 extension/skill 列表 | 会把资源路径转换为绕过 Spawned cwd discovery 与 project trust 的 CLI 输入 |
 | Primary/Spawned 分成两个 extension | 容易造成协议、工具和版本漂移 |
-| 所有 runtime 注册全部工具后运行时拒绝 | 模型仍能看到无权使用的 Agent/StopAgent，工具表面不真实 |
+| 所有 runtime 注册全部工具后运行时拒绝 | 模型仍能看到无权使用的 Agent，工具表面不真实 |
 | CSV 与数组同时支持 | 扩大解析与诊断表面，没有未发布兼容需求 |
 
 ## Consequences

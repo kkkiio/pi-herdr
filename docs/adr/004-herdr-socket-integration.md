@@ -5,7 +5,7 @@
 
 ## Context
 
-pi-herdr 需要创建 Agent tab/pane、启动交互式 Pi、投递 live prompt、发现 peer、同步 name、观察状态和实现 StopAgent。所有操作都发生在当前 Herdr live session，不需要在 runtime 消失后重建逻辑 Agent。当前平台基线是 Herdr 0.7.5 / socket protocol 17。
+pi-herdr 需要创建 Agent tab/pane、启动交互式 Pi、投递 live prompt、发现 peer、同步 name 和观察状态。所有操作都发生在当前 Herdr live session，不需要在 runtime 消失后重建逻辑 Agent。当前平台基线是 Herdr 0.7.5 / socket protocol 17。
 
 ## Decision
 
@@ -42,11 +42,11 @@ Tag attribute XML-escape，正文原样传递，没有 closing tag。pi-herdr �
 
 目标必须 live。`agent.prompt` 成功仅证明 herdr 接受输入，不代表 Agent 已完成工作。
 
-### 4. Discovery and stop use live AgentInfo
+### 4. Discovery uses live AgentInfo
 
 `agent.list` / `agent.get` 是 discovery 与目标解析的事实来源。`ListAgents` 保留原始 `AgentInfo`，再用当前 Primary 内存附加 `type` 与 `createdBy`。
 
-`StopAgent` 解析 name 或 pane ID，拒绝调用者自身，然后调用目标 `pane.close`。它不关闭整个 tab，不删除 session/worktree，也不成为任意 pane 管理接口。
+停止不经 pi-herdr：用户直接通过 Herdr 关闭 pane/tab。
 
 ### 5. Name synchronization stays in the spawned process
 
@@ -95,7 +95,6 @@ pi-herdr 不暴露通用 workspace/tab/pane/layout、terminal input、agent wait
 | Cross-process custom `pi.sendMessage` | 该 API 属于目标进程本地 extension，herdr prompt 无法直接调用它                                           |
 | Mutating RPC auto-retry               | 响应丢失时会重复创建、发送或关闭                                                                         |
 | Worktree 后再创建 tab                 | `worktree.create` 已返回 tab/root pane；只需 `tab.rename` 同步 label，额外 tab 会破坏一个 Agent 一个 tab |
-| StopAgent 关闭整个 tab                | 可能误关用户后来加入的其他 pane                                                                          |
 
 ## Consequences
 
