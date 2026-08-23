@@ -3,6 +3,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import type { ResolvedAgentDefinition } from "./agent-definitions.js";
 import type { AgentInfo } from "./herdr-types.js";
 import { HerdrClient } from "./herdr-client.js";
+import { modelSoundnessNote } from "./model-notes.js";
 
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
@@ -130,15 +131,15 @@ export class AgentRuntime {
 		};
 	}
 
-	buildEnvelope(sender: AgentInfo, message: string): string {
+	buildEnvelope(sender: AgentInfo, message: string, senderModel?: string): string {
 		const senderAddress = sender.name ?? sender.pane_id;
-		const escapedSender = senderAddress
-			.replaceAll("&", "&amp;")
-			.replaceAll('"', "&quot;")
-			.replaceAll("<", "&lt;")
-			.replaceAll(">", "&gt;")
-			.replaceAll("'", "&apos;");
-		return `<from agent="${escapedSender}" reply-to="${escapedSender}">\n${message}`;
+		const modelAttribute = senderModel ? ` model="${senderModel}"` : "";
+		const note = senderModel ? modelSoundnessNote(senderModel) : undefined;
+		// Angle brackets mark pi-herdr-inserted metadata, plain text is the
+		// sender's verbatim body; receivers cannot look traits up themselves,
+		// so the soundness hint must travel inside the envelope.
+		const noteLine = note ? `<sender-model-note>${note}</sender-model-note>\n\n` : "";
+		return `<from agent="${senderAddress}" reply-to="${senderAddress}"${modelAttribute}>\n${noteLine}${message}`;
 	}
 }
 

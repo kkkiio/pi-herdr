@@ -11,7 +11,7 @@ Feature: Live Agent discovery and messaging
     Given a protocol 17 Herdr with one named and one unnamed target
     When the Primary sends messages by name and by pane ID
     Then Herdr resolves both supplied routes
-    And each prompt prefers the target name and preserves an escaped reply envelope
+    And each prompt prefers the target name and preserves a verbatim reply envelope
 
   Scenario: StopAgent cannot close its caller
     Given a protocol 17 Herdr whose requested stop target is the caller

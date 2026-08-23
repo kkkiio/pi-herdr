@@ -30,6 +30,10 @@ interface OwnedAgent {
 	createdByPaneId: string;
 }
 
+function currentModelId(ctx: ExtensionContext): string | undefined {
+	return ctx.model ? `${ctx.model.provider}/${ctx.model.id}` : undefined;
+}
+
 interface SupervisorConfiguration {
 	maxMembers: number;
 	sessionDirectory: string | undefined;
@@ -201,7 +205,7 @@ export class AgentSupervisor {
 			if (ctx.signal?.aborted) throw new Error("Agent launch was cancelled before its initial prompt.");
 			const prompted = await this.client.requestMutation("agent.prompt", {
 				target: startedAgent.name ?? startedAgent.pane_id,
-				text: this.runtime.buildEnvelope(callerResult.agent, request.prompt),
+				text: this.runtime.buildEnvelope(callerResult.agent, request.prompt, currentModelId(ctx)),
 			});
 			this.owned.set(prompted.agent.pane_id, {
 				description: request.description,
@@ -399,7 +403,12 @@ export class AgentSupervisor {
 		};
 	}
 
-	async send(target: string, message: string, signal?: AbortSignal): Promise<{ delivered: true; agent: AgentInfo }> {
+	async send(
+		target: string,
+		message: string,
+		signal?: AbortSignal,
+		senderModel?: string,
+	): Promise<{ delivered: true; agent: AgentInfo }> {
 		if (typeof target !== "string" || typeof message !== "string" || !target.trim() || !message.trim()) {
 			throw new Error("agent and message must contain visible text.");
 		}
@@ -418,7 +427,7 @@ export class AgentSupervisor {
 		if (signal?.aborted) throw new Error("Message delivery was cancelled before agent.prompt.");
 		const result = await this.client.requestMutation("agent.prompt", {
 			target: targetResult.agent.name ?? targetResult.agent.pane_id,
-			text: this.runtime.buildEnvelope(senderResult.agent, message),
+			text: this.runtime.buildEnvelope(senderResult.agent, message, senderModel),
 		});
 		return { delivered: true, agent: result.agent };
 	}

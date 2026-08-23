@@ -34,3 +34,11 @@ Feature: Runtime roles and Agent definitions
     Given selected definitions and authenticated Primary models
     When a launch plan is resolved for a definition at a deep multi-byte path
     Then the launch plan rejects the oversized argv with a tty budget error
+
+  Scenario: Model awareness notes list only available noted models
+    When model awareness notes are computed for available model ids "deepseek-v4-flash, acme/kimi-3"
+    Then the notes mention "deepseek-v4-flash" and "kimi-3" but not "gpt-5.6-sol"
+
+  Scenario: Model awareness notes disappear when no noted model is available
+    When model awareness notes are computed for available model ids "some-other-model"
+    Then no model awareness notes are produced

@@ -8,6 +8,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import piHerdrExtension from "../../../src/index.js";
 import { AgentDefinitionStore, type ResolvedAgentDefinition } from "../../../src/agent-definitions.js";
 import { AgentRuntime } from "../../../src/agent-runtime.js";
+import { availableModelNotes } from "../../../src/model-notes.js";
 import type { AgentSupervisor } from "../../../src/agent-supervisor.js";
 import { registerAgentTools } from "../../../src/tools.js";
 import { RpcPiSmoke, type PiSurfaceObservation } from "../support/rpc-pi-smoke.js";
@@ -265,4 +266,24 @@ Then("the launch plan rejects the oversized argv with a tty budget error", funct
 	const error = this.state.get("oversizedPlanError");
 	assert.ok(error instanceof Error, "oversized argv error must be recorded");
 	assert.ok(String(error.message).includes("tty safety budget"), String(error));
+});
+
+When("model awareness notes are computed for available model ids {string}", function (this: PiHerdrWorld, ids: string) {
+	const availableIds = ids.split(",").map((id) => id.trim().split("/").pop() ?? "");
+	this.state.set("modelNotes", availableModelNotes(availableIds));
+});
+
+Then(
+	"the notes mention {string} and {string} but not {string}",
+	function (this: PiHerdrWorld, first: string, second: string, excluded: string) {
+		const notes = this.state.get("modelNotes");
+		assert.equal(typeof notes, "string");
+		assert.ok((notes as string).includes(first), String(notes));
+		assert.ok((notes as string).includes(second), String(notes));
+		assert.ok(!(notes as string).includes(excluded), String(notes));
+	},
+);
+
+Then("no model awareness notes are produced", function (this: PiHerdrWorld) {
+	assert.equal(this.state.get("modelNotes"), undefined);
 });
