@@ -14,7 +14,7 @@ Feature: Persistent Agent lifecycle
     Given a protocol 17 Herdr that accepts a worktree Agent launch
     When the Primary launches the worktree Agent
     Then worktree creation and tab rename happen before Pi startup
-    And Pi startup selects the Spawned extension role in the returned pane
+    And Pi startup loads the pi-herdr extension in the returned pane
 
   Scenario: Failed worktree launch cleans up without recording ownership
     Given a protocol 17 Herdr that rejects the worktree Agent prompt and safe removal

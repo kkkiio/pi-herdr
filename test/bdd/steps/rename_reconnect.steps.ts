@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import { SpawnedNameSynchronizer } from "../../../src/agent-runtime.js";
+import { NameSynchronizer } from "../../../src/agent-runtime.js";
 import { HerdrClient } from "../../../src/herdr-client.js";
 import type { HerdrEvent } from "../../../src/herdr-types.js";
 import { PiHerdrWorld, primaryAgent, type RequestHandler } from "../support/world.js";
@@ -69,7 +69,7 @@ async function installRenameRuntime(thisWorld: PiHerdrWorld, rejectNewTabLabel: 
 			sessionRollbacks.push(name);
 		},
 	} as unknown as ExtensionAPI;
-	const synchronizer = new SpawnedNameSynchronizer(
+	const synchronizer = new NameSynchronizer(
 		pi,
 		client,
 		primaryAgent.pane_id,
@@ -93,7 +93,7 @@ Given("a Spawned runtime whose new tab label is rejected", async function (this:
 });
 
 When("its Pi session name changes to new-name", async function (this: PiHerdrWorld) {
-	const synchronizer = this.state.get("synchronizer") as SpawnedNameSynchronizer;
+	const synchronizer = this.state.get("synchronizer") as NameSynchronizer;
 	const setCurrentSessionName = this.state.get("setCurrentSessionName") as (name: string | undefined) => void;
 	setCurrentSessionName("new-name");
 	await synchronizer.handle("new-name");

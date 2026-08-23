@@ -227,12 +227,12 @@ Then("worktree creation and tab rename happen before Pi startup", function (this
 	assert.deepEqual(rename?.params, { tab_id: "t-worktree", label: "worker" });
 });
 
-Then("Pi startup selects the Spawned extension role in the returned pane", function (this: PiHerdrWorld) {
+Then("Pi startup loads the pi-herdr extension in the returned pane", function (this: PiHerdrWorld) {
 	const start = this.server?.requests.find((request) => request.method === "agent.start");
 	assert.equal(start?.params.pane_id, "w2:p1");
 	const args = start?.params.args as string[];
-	const roleIndex = args.indexOf("--pi-herdr-role");
-	assert.equal(args[roleIndex + 1], "spawned");
+	assert.ok(args.includes("--extension"), args.join(" "));
+	assert.ok(!args.includes("--pi-herdr-role"), args.join(" "));
 });
 
 When("the Primary attempts to launch the worktree Agent", async function (this: PiHerdrWorld) {

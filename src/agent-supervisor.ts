@@ -142,7 +142,7 @@ export class AgentSupervisor {
 			throw new Error(`A live Agent or peer already uses the name ${request.name}.`);
 		}
 		if (this.launchReservations.has(request.name)) {
-			throw new Error(`An Agent named ${request.name} is already being launched by this Primary Agent.`);
+			throw new Error(`An Agent named ${request.name} is already being launched by this session.`);
 		}
 		this.launchReservations.add(request.name);
 

@@ -19,9 +19,9 @@ pi-herdr 需要创建 Agent tab/pane、启动交互式 Pi、投递 live prompt�
 
 ### 2. Creation uses returned root panes
 
-共享 workspace 时把 `Agent({ cwd })` 解析出的工作目录传给 `tab.create`，直接在返回的 root pane 中执行 `agent.start`；未提供 cwd 时继承 Primary 调用时的 cwd。Worktree 隔离时把同一 cwd 传给 `worktree.create`，直接复用其返回的 workspace、tab 和 root pane，不再额外调用 `tab.create`，随后显式调用 `tab.rename` 把返回 tab 的 label 同步为 Agent name。Definition 文件位置不参与 cwd 或 worktree 选择。
+共享 workspace 时把 `Agent({ cwd })` 解析出的工作目录传给 `tab.create`，直接在返回的 root pane 中执行 `agent.start`；未提供 cwd 时继承调用方调用时的 cwd。Worktree 隔离时把同一 cwd 传给 `worktree.create`，直接复用其返回的 workspace、tab 和 root pane，不再额外调用 `tab.create`，随后显式调用 `tab.rename` 把返回 tab 的 label 同步为 Agent name。Definition 文件位置不参与 cwd 或 worktree 选择。
 
-`worktree.create` 没有 env 参数。`agent.start` 通过 `args` 启动全新、正常落盘的 Pi session，显式加载同一个 pi-herdr extension，并用 Pi flag `--pi-herdr-role spawned` 选择 Spawned role；definition 的模型、thinking、工具和资源也映射到 Pi args。pi-herdr 不传 `--approve` 或 `--no-approve`；Spawned Pi 针对实际 cwd 正常执行原生 project trust。name 同时用于 Pi session、Herdr Agent route 和 tab label。
+`worktree.create` 没有 env 参数。`agent.start` 通过 `args` 启动全新、正常落盘的 Pi session，显式加载同一个 pi-herdr extension；所有会话获得相同工具表面，不传角色标记。definition 的模型、thinking、工具和资源映射到 Pi args。pi-herdr 不传 `--approve` 或 `--no-approve`；新 Pi 针对实际 cwd 正常执行原生 project trust。name 同时用于 Pi session、Herdr Agent route 和 tab label。
 
 raw `agent.start` 返回成功时 Agent 可能仍有 `launch_pending: true`。运行时使用可重试的只读 `agent.get` 轮询，直到 `launch_pending: false` 且 `interactive_ready: true`，之后才提交初始 `agent.prompt`。只有 prompt 成功后 `Agent` 才返回 `launched`。
 
@@ -44,13 +44,13 @@ Tag attribute XML-escape，正文原样传递，没有 closing tag。pi-herdr �
 
 ### 4. Discovery uses live AgentInfo
 
-`agent.list` / `agent.get` 是 discovery 与目标解析的事实来源。`ListAgents` 保留原始 `AgentInfo`，再用当前 Primary 内存附加 `type` 与 `createdBy`。
+`agent.list` / `agent.get` 是 discovery 与目标解析的事实来源。`ListAgents` 保留原始 `AgentInfo`，再用当前会话内存附加 `type` 与 `createdBy`。
 
 停止不经 pi-herdr：用户直接通过 Herdr 关闭 pane/tab。
 
-### 5. Name synchronization stays in the spawned process
+### 5. Name synchronization stays in each process
 
-同一个 extension 的 Spawned 模式监听自身 `session_info_changed`。新名字必须符合 `[a-z][a-z0-9_-]{0,31}` 并满足 herdr live 唯一性，然后依次调用 `agent.rename` 与 `tab.rename`。
+每个加载 pi-herdr 的会话都监听自身 `session_info_changed`。新名字必须符合 `[a-z][a-z0-9_-]{0,31}` 并满足 herdr live 唯一性，然后依次调用 `agent.rename` 与 `tab.rename`。
 
 herdr 的原子 uniqueness check 处理验证后的竞争。任一步失败时，extension 用重入 guard 恢复已修改状态和旧 pi session name。
 
@@ -60,7 +60,7 @@ Supervisor 的 subscription request 使用 protocol 17 点号类型：`pane.agen
 
 Push envelope 使用 Herdr 的实际 wire schema，而不是把 request type 原样回显：普通 lifecycle push 是 `pane_agent_detected`、`pane_closed`、`pane_exited`、`tab_closed`、`tab_renamed`；过滤后的状态 push 是点号 `pane.agent_status_changed`。客户端分别建模并处理这两组名称。
 
-事件更新当前 Primary 的内存记录、容量和 UI。`done` 与 `unknown` 保留在工具返回中；只有 UI 可以把 `done` 视觉归类为 idle。关闭事件删除本地 ownership，不创建 unavailable 状态。
+事件更新当前会话的内存记录与 UI。`done` 与 `unknown` 保留在工具返回中；只有 UI 可以把 `done` 视觉归类为 idle。关闭事件删除本地 ownership，不创建 unavailable 状态。
 
 ### 7. Retry only idempotent reads
 
@@ -107,7 +107,7 @@ pi-herdr 不暴露通用 workspace/tab/pane/layout、terminal input、agent wait
 ### Negative
 
 - Prompt delivery mode 完全依赖 herdr/pi 当前原生行为。
-- Primary 重启后无法恢复 createdBy/type ownership。
+- 创建者会话重启后无法恢复 createdBy/type ownership。
 - 关闭 runtime 后不能再通过 pi-herdr 消息寻址原 session。
 
 ### Unresolved

@@ -1,22 +1,20 @@
-Feature: Runtime roles and Agent definitions
-  One extension exposes a bounded tool surface and resolves explicit paths or a strict fallback catalog.
+Feature: Control surface and Agent definitions
+  One extension exposes a uniform control tool surface and resolves explicit paths or a strict fallback catalog.
 
-  Scenario: Primary and Spawned roles have exact control tool surfaces
+  Scenario: The extension registers one uniform control tool surface
     Given a Pi tool registration recorder
-    When pi-herdr registers Primary and Spawned control tools
-    Then Primary has Agent, ListAgents, and SendMessage
-    And Spawned has only ListAgents and SendMessage
+    When pi-herdr registers its control tools
+    Then the surface has Agent, ListAgents, and SendMessage
 
   Scenario: Outside Herdr the extension is silent
     Given HERDR_ENV is not 1
     When the pi-herdr extension receives session_start
     Then it registers no control tools or user command and emits no notification
 
-  Scenario: Real Pi RPC parses the role flag and loads the extension surface
+  Scenario: Real Pi RPC loads the extension surface inside Herdr
     Given a fake protocol 17 Herdr for real Pi RPC sessions
-    When real Pi RPC starts once as Primary and once as Spawned
-    Then the Primary RPC session exposes exactly three pi-herdr tools and the agents command
-    And the Spawned RPC session exposes exactly two pi-herdr tools and no agents command
+    When a real Pi RPC session starts inside Herdr
+    Then the RPC session exposes exactly three pi-herdr tools and the agents command
 
   Scenario: A malformed global definition never falls through to bundled catalog entries
     Given a malformed global definition shadows a valid bundled definition

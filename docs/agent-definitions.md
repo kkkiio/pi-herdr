@@ -1,6 +1,6 @@
 # Agent Definitions
 
-Agent definition 是带 YAML frontmatter 的 Markdown 文件。Frontmatter 决定创建时的模型、工具和资源配置；body 非空时，definition 文件的绝对路径通过 `--append-system-prompt` 传给 spawned Pi（Pi 识别文件路径参数并读入内容，frontmatter 一并进入 system prompt），用于定义角色行为。
+Agent definition 是带 YAML frontmatter 的 Markdown 文件。Frontmatter 决定创建时的模型、工具和资源配置；body 非空时，definition 文件的绝对路径通过 `--append-system-prompt` 传给新创建的 Pi（Pi 识别文件路径参数并读入内容，frontmatter 一并进入 system prompt），用于定义角色行为。
 
 Definition 只在 `Agent` 创建时解析。文件之后发生变化不会热更新已经 live 的 Agent。
 
@@ -10,25 +10,25 @@ Definition 只在 `Agent` 创建时解析。文件之后发生变化不会热更
 
 ### Definition catalog
 
-Primary 启动时，pi-herdr 从以下两个位置构建 definition catalog：
+会话启动时，pi-herdr 从以下两个位置构建 definition catalog：
 
 1. `~/.pi/agent/agents/<name>.md`
 2. npm 包内 `agents/<name>.md`
 
-用户级 definition 与 bundled definition 同名时完整覆盖 bundled definition，不做字段合并。显式禁用或格式错误的用户级 definition 同样保留该名字，不静默回退到 bundled 文件；它产生配置诊断且不能创建。Catalog 中每个有效、启用的名称和 description 会写入 `Agent` 工具的 `definition` 参数说明，让 Primary 直接选择，同时保留项目路径输入。Catalog 是当前 Primary 的工具表面，用户级目录变化后重新启动 Primary 才会刷新列表；实际创建时仍重新读取并严格校验选中的文件。
+用户级 definition 与 bundled definition 同名时完整覆盖 bundled definition，不做字段合并。显式禁用或格式错误的用户级 definition 同样保留该名字，不静默回退到 bundled 文件；它产生配置诊断且不能创建。Catalog 中每个有效、启用的名称和 description 会写入 `Agent` 工具的 `definition` 参数说明，让调用方直接选择，同时保留项目路径输入。Catalog 随会话启动构建，用户级目录变化后重启会话才会刷新列表；实际创建时仍重新读取并严格校验选中的文件。
 
 Catalog name 不包含 `/`、`\`，也不以 `.md` 结尾，匹配大小写不敏感。文件名去掉 `.md` 后是 definition name。
 
 ### Project paths
 
-项目 definition 不进入全局 catalog，也不由 pi-herdr 自动扫描。需要项目专属角色时，推荐 Primary 使用普通文件搜索或 Git 查询检查任务相关仓库中的：
+项目 definition 不进入全局 catalog，也不由 pi-herdr 自动扫描。需要项目专属角色时，推荐使用普通文件搜索或 Git 查询检查任务相关仓库中的：
 
 - `<project>/.pi/agents/*.md`
 - `<project>/.agents/agents/*.md`
 
-找到合适角色后，Primary 把绝对路径或以 `./`、`../` 开头的显式相对路径传给 `definition`。相对路径以 Primary 调用 `Agent` 时的 cwd 为基准；pi-herdr 规范化路径并要求目标是带 `.md` 后缀的普通文件。Definition 路径是精确选择，不参与 catalog 的覆盖或回退。没有合适项目角色时直接使用 catalog；项目目录检查不是创建前置条件。
+找到合适角色后，调用方把绝对路径或以 `./`、`../` 开头的显式相对路径传给 `definition`。相对路径以调用 `Agent` 时的 cwd 为基准；pi-herdr 规范化路径并要求目标是带 `.md` 后缀的普通文件。Definition 路径是精确选择，不参与 catalog 的覆盖或回退。没有合适项目角色时直接使用 catalog；项目目录检查不是创建前置条件。
 
-Definition path 只决定角色配置，不隐式改变 Spawned Agent 的 workspace 或 cwd。`cwd` 是独立的 `Agent` 参数；它与相对 definition path 分别基于 Primary 调用时的 cwd 解析，二者不互相推导或校验。
+Definition path 只决定角色配置，不隐式改变新 Agent 的 workspace 或 cwd。`cwd` 是独立的 `Agent` 参数；它与相对 definition path 分别基于调用时的 cwd 解析，二者不互相推导或校验。
 
 ## Format
 
@@ -66,15 +66,15 @@ enabled: true
 | `disallowed_tools` | string[] | 从最终工作工具中移除的工具 |
 | `enabled` | boolean | `false` 时该角色不可创建 |
 
-集合字段只接受 YAML 数组，不解析 CSV。所有来源的 `extensions` 与 `skills` 都只接受 boolean；`true` 不传显式资源或 `--no-*` flag，由 Spawned Pi 从实际 cwd 原生发现并应用 project trust，`false` 关闭对应发现。pi-herdr 不通过 definition 加载具体 extension 或 skill 路径。
+集合字段只接受 YAML 数组，不解析 CSV。所有来源的 `extensions` 与 `skills` 都只接受 boolean；`true` 不传显式资源或 `--no-*` flag，由新 Pi 从实际 cwd 原生发现并应用 project trust，`false` 关闭对应发现。pi-herdr 不通过 definition 加载具体 extension 或 skill 路径。
 
 Frontmatter 是封闭 schema，表格之外的字段全部报错。Worktree 是单次 `Agent` 调用的文件系统选择，不属于角色 definition。
 
 ## Resources and Project Trust
 
-Definition 只配置普通 extensions、skills 与工作工具；Primary/Spawned 的工具边界由 [Spawned Agent Contract](spawned-agent-contract.md#单扩展双模式) 定义，不受 definition 内容影响。pi-herdr 的 Spawned 模式作为创建命令显式指定的 extension 加载，不属于普通 extensions 发现范围。
+Definition 只配置普通 extensions、skills 与工作工具；pi-herdr 自己的工具表面对所有会话一致（见 [Agent Contract](agent-contract.md#uniform-extension-surface)），不受 definition 内容影响。pi-herdr 作为创建命令显式指定的 extension 加载，不属于普通 extensions 发现范围。
 
-显式 definition path 本身是 `Agent` 的调用输入，不属于 Pi 自动发现的项目资源，也不经过 project trust。pi-herdr 不把 project trust 规则写入 Primary prompt，也不维护或覆盖 Pi 的 trust 决定。Spawned Pi 针对自己的实际 cwd 正常执行原生 project trust；启动参数不传 `--approve` 或 `--no-approve`。
+显式 definition path 本身是 `Agent` 的调用输入，不属于 Pi 自动发现的项目资源，也不经过 project trust。pi-herdr 不把 project trust 规则写入调用方 prompt，也不维护或覆盖 Pi 的 trust 决定。新 Pi 针对自己的实际 cwd 正常执行原生 project trust；启动参数不传 `--approve` 或 `--no-approve`。
 
 ## Model Resolution
 
@@ -82,11 +82,11 @@ Definition 只配置普通 extensions、skills 与工作工具；Primary/Spawned
 
 1. `Agent({ model })` 显式参数。
 2. 当前选中的 definition。
-3. Primary 当前模型。
+3. 调用方当前模型。
 
 候选必须已经认证、存在于 Pi model registry，并符合当前 scoped/enabled models。ID 匹配把 `.` 与 `-` 视为等价；多个 provider 命中同一 ID 时使用 registry 顺序中的第一个可用项。
 
-显式 `Agent({ model })` 候选全部不可用时创建失败。Definition 的默认候选全部不可用时静默继承 Primary 当前模型。
+显式 `Agent({ model })` 候选全部不可用时创建失败。Definition 的默认候选全部不可用时静默继承调用方当前模型。
 
 model 和 thinking 只是初始配置。Agent 启动后，用户通过 `/model` 或其他 Pi 原生能力进行的显式修改正常写入 session，后续消息继续使用新状态。
 
@@ -96,12 +96,12 @@ model 和 thinking 只是初始配置。Agent 启动后，用户通过 `/model` 
 
 - 使用 `read`、`bash`、`grep`、`find` 和 `ls`，并设置 `extensions: false`、`skills: false`。
 - Bash 只用于读取、Git 查询、统计与分析，不创建、修改或删除文件。
-- 初始模型优先选择 `gpt-5.6-luna`、`deepseek-v4-flash`，均不可用时继承 Primary 模型。
+- 初始模型优先选择 `gpt-5.6-luna`、`deepseek-v4-flash`，均不可用时继承调用方模型。
 
 ### `general-purpose`
 
 - 使用全部工作工具，并设置 `extensions: true`、`skills: true`，让 Pi 按原生信任与资源发现规则加载普通能力。
-- 初始模型继承 Primary 模型。
+- 初始模型继承调用方模型。
 - 适合实现、重构、测试、文档和开放式调查。
 
 ## Packaging

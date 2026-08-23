@@ -18,29 +18,19 @@ Given("a Pi tool registration recorder", function (this: PiHerdrWorld) {
 	this.state.set("toolRecorderReady", true);
 });
 
-When("pi-herdr registers Primary and Spawned control tools", function (this: PiHerdrWorld) {
+When("pi-herdr registers its control tools", function (this: PiHerdrWorld) {
 	assert.equal(this.state.get("toolRecorderReady"), true);
-	const primary: string[] = [];
-	const spawned: string[] = [];
-	const primaryPi = {
-		registerTool: (tool: { name: string }) => primary.push(tool.name),
-	} as unknown as ExtensionAPI;
-	const spawnedPi = {
-		registerTool: (tool: { name: string }) => spawned.push(tool.name),
+	const registered: string[] = [];
+	const recorder = {
+		registerTool: (tool: { name: string }) => registered.push(tool.name),
 	} as unknown as ExtensionAPI;
 	const inertSupervisor = {} as AgentSupervisor;
-	registerAgentTools(primaryPi, inertSupervisor, "primary");
-	registerAgentTools(spawnedPi, inertSupervisor, "spawned");
-	this.state.set("primaryTools", primary);
-	this.state.set("spawnedTools", spawned);
+	registerAgentTools(recorder, inertSupervisor);
+	this.state.set("registeredTools", registered);
 });
 
-Then("Primary has Agent, ListAgents, and SendMessage", function (this: PiHerdrWorld) {
-	assert.deepEqual(this.state.get("primaryTools"), ["Agent", "ListAgents", "SendMessage"]);
-});
-
-Then("Spawned has only ListAgents and SendMessage", function (this: PiHerdrWorld) {
-	assert.deepEqual(this.state.get("spawnedTools"), ["ListAgents", "SendMessage"]);
+Then("the surface has Agent, ListAgents, and SendMessage", function (this: PiHerdrWorld) {
+	assert.deepEqual(this.state.get("registeredTools"), ["Agent", "ListAgents", "SendMessage"]);
 });
 
 Given("HERDR_ENV is not 1", function (this: PiHerdrWorld) {
@@ -102,57 +92,28 @@ Given("a fake protocol 17 Herdr for real Pi RPC sessions", async function (this:
 	});
 });
 
-When("real Pi RPC starts once as Primary and once as Spawned", async function (this: PiHerdrWorld) {
+When("a real Pi RPC session starts inside Herdr", async function (this: PiHerdrWorld) {
 	const sandbox = await this.prepareSandbox();
 	const server = this.server;
 	assert.ok(server);
-	const primary = await RpcPiSmoke.start({
+	const session = await RpcPiSmoke.start({
 		root: sandbox,
 		socketPath: server.socketPath,
 		paneId: "w1:p1",
-		role: "primary",
 	});
-	this.trackCleanup(() => primary.dispose());
-	const spawned = await RpcPiSmoke.start({
-		root: sandbox,
-		socketPath: server.socketPath,
-		paneId: "w1:p2",
-		role: "spawned",
-	});
-	this.trackCleanup(() => spawned.dispose());
-	this.state.set("primaryRpcSurface", primary.observation);
-	this.state.set("spawnedRpcSurface", spawned.observation);
+	this.trackCleanup(() => session.dispose());
+	this.state.set("rpcSurface", session.observation);
 });
 
-Then(
-	"the Primary RPC session exposes exactly three pi-herdr tools and the agents command",
-	function (this: PiHerdrWorld) {
-		const observation = this.state.get("primaryRpcSurface") as PiSurfaceObservation;
-		assert.deepEqual(observation.activeTools, ["Agent", "ListAgents", "SendMessage"]);
-		assert.deepEqual(
-			observation.allTools.filter((name) => ["Agent", "ListAgents", "SendMessage"].includes(name)),
-			["Agent", "ListAgents", "SendMessage"],
-		);
-		assert.ok(observation.commands.some((command) => command.name === "agents" && command.source === "extension"));
-		assert.ok(observation.rpcCommands.some((command) => command.name === "agents" && command.source === "extension"));
-	},
-);
-
-Then("the Spawned RPC session exposes exactly two pi-herdr tools and no agents command", function (this: PiHerdrWorld) {
-	const observation = this.state.get("spawnedRpcSurface") as PiSurfaceObservation;
-	assert.deepEqual(observation.activeTools, ["ListAgents", "SendMessage"]);
+Then("the RPC session exposes exactly three pi-herdr tools and the agents command", function (this: PiHerdrWorld) {
+	const observation = this.state.get("rpcSurface") as PiSurfaceObservation;
+	assert.deepEqual(observation.activeTools, ["Agent", "ListAgents", "SendMessage"]);
 	assert.deepEqual(
 		observation.allTools.filter((name) => ["Agent", "ListAgents", "SendMessage"].includes(name)),
-		["ListAgents", "SendMessage"],
+		["Agent", "ListAgents", "SendMessage"],
 	);
-	assert.equal(
-		observation.commands.some((command) => command.name === "agents"),
-		false,
-	);
-	assert.equal(
-		observation.rpcCommands.some((command) => command.name === "agents"),
-		false,
-	);
+	assert.ok(observation.commands.some((command) => command.name === "agents" && command.source === "extension"));
+	assert.ok(observation.rpcCommands.some((command) => command.name === "agents" && command.source === "extension"));
 });
 
 Given("a malformed global definition shadows a valid bundled definition", async function (this: PiHerdrWorld) {

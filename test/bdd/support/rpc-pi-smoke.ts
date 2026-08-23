@@ -24,18 +24,13 @@ export class RpcPiSmoke {
 	private requestSequence = 0;
 	private stderr = "";
 
-	static async start(options: {
-		root: string;
-		socketPath: string;
-		paneId: string;
-		role: "primary" | "spawned";
-	}): Promise<RpcPiSmoke> {
+	static async start(options: { root: string; socketPath: string; paneId: string }): Promise<RpcPiSmoke> {
 		const here = dirname(fileURLToPath(import.meta.url));
 		const repository = resolve(here, "../../..");
-		const project = join(options.root, `rpc-${options.role}`);
-		const agentDirectory = join(options.root, `agent-${options.role}`);
-		const home = join(options.root, `home-${options.role}`);
-		const observationPath = join(options.root, `${options.role}-surface.json`);
+		const project = join(options.root, "rpc-project");
+		const agentDirectory = join(options.root, "rpc-agent");
+		const home = join(options.root, "rpc-home");
+		const observationPath = join(options.root, "rpc-surface.json");
 		await Promise.all([
 			mkdir(project, { recursive: true }),
 			mkdir(agentDirectory, { recursive: true }),
@@ -50,8 +45,6 @@ export class RpcPiSmoke {
 			join(repository, "src", "index.ts"),
 			"--extension",
 			join(repository, "test", "bdd", "fixtures", "tool-observer.ts"),
-			"--pi-herdr-role",
-			options.role,
 			"--no-session",
 			"--no-builtin-tools",
 			"--no-extensions",

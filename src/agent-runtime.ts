@@ -20,7 +20,7 @@ export interface AgentLaunchPlan {
 	thinking?: ThinkingLevel;
 }
 
-const SPAWNED_CONTROL_TOOLS = ["ListAgents", "SendMessage"] as const;
+const CONTROL_TOOLS = ["Agent", "ListAgents", "SendMessage"] as const;
 
 // tty input queues silently truncate typed commands around 1024 bytes
 // (herdrdev/herdr#2862); keep the final launch argv well below that.
@@ -82,14 +82,14 @@ export class AgentRuntime {
 		if (!selected && !explicitCandidates && candidates.length > 0) selected = ctx.model;
 		if (!selected && candidates.length === 0) selected = ctx.model;
 		if (!selected) {
-			throw new Error("Cannot launch an Agent because the Primary session has no available model.");
+			throw new Error("Cannot launch an Agent because the current session has no available model.");
 		}
 
-		const args = ["--name", agentName, "--extension", this.extensionPath, "--pi-herdr-role", "spawned"];
+		const args = ["--name", agentName, "--extension", this.extensionPath];
 		// Long text must stay out of argv: Herdr delivers agent.start by typing the
 		// command into the pane shell, and tty input queues silently truncate around
 		// 1024 bytes (herdrdev/herdr#2862). Pi reads file paths for prompt flags, so
-		// the definition body reaches the Spawned Agent through its Markdown file.
+		// the definition body reaches the new Agent through its Markdown file.
 		if (definition.prompt.trim()) {
 			args.push("--append-system-prompt", definition.path);
 		}
@@ -98,12 +98,12 @@ export class AgentRuntime {
 		if (thinking) args.push("--thinking", thinking);
 
 		if (definition.tools && !(definition.tools.length === 1 && definition.tools[0] === "all")) {
-			const tools = [...new Set([...definition.tools, ...SPAWNED_CONTROL_TOOLS])];
+			const tools = [...new Set([...definition.tools, ...CONTROL_TOOLS])];
 			args.push("--tools", tools.join(","));
 		}
 		if (definition.disallowed_tools?.length) {
 			const denied = definition.disallowed_tools.filter(
-				(tool) => !SPAWNED_CONTROL_TOOLS.some((control) => control.toLowerCase() === tool.toLowerCase()),
+				(tool) => !CONTROL_TOOLS.some((control) => control.toLowerCase() === tool.toLowerCase()),
 			);
 			if (denied.length) args.push("--exclude-tools", denied.join(","));
 		}
@@ -143,7 +143,7 @@ export class AgentRuntime {
 	}
 }
 
-export class SpawnedNameSynchronizer {
+export class NameSynchronizer {
 	private lastSyncedName: string | undefined;
 	private rollbackEventName: string | undefined;
 	private queue: Promise<void> = Promise.resolve();

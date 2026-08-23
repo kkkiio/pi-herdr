@@ -304,7 +304,7 @@ export class HerdrHarness {
 		});
 	}
 
-	/** Creates a real workspace whose root shell pane acts as the Primary caller. */
+	/** Creates a real workspace whose root shell pane acts as the caller. */
 	async createCallerPane(cwd: string): Promise<{ workspaceId: string; paneId: string }> {
 		const result = await this.rpc("workspace.create", { cwd, label: "pi-herdr-e2e-caller" });
 		const workspace = result.workspace as { workspace_id?: string } | undefined;

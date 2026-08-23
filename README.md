@@ -57,7 +57,7 @@ pi-herdr 只封装后台 Agent 工作流需要的 Herdr 能力，不替代 Herdr
 
 ## Documentation
 
-- [Spawned Agent contract](docs/spawned-agent-contract.md) — Agent 的创建、生命周期、隔离与停止行为。
+- [Agent contract](docs/agent-contract.md) — Agent 的创建、生命周期、隔离与停止行为。
 - [Agent definitions](docs/agent-definitions.md) — 使用内置角色或定义项目角色。
 - [Messaging](docs/messaging.md) — 发现 Agent、发送消息与回复。
 - [Herdr RPC integration](docs/herdr-rpc.md) — Herdr 版本、协议和 RPC 边界。
