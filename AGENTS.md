@@ -23,11 +23,11 @@ pi-herdr 是 TypeScript ESM Pi extension。
 │   ├── agent-definitions.md               # Markdown frontmatter 用户参考
 │   ├── herdr-rpc.md                       # Socket protocol、事件、重试与 RPC 边界
 │   └── adr/                               # Accepted 设计决策；修改 lifecycle/messaging/transport/naming 行为前先读对应 ADR
-│       ├── 001-persistent-background-agents.md
-│       ├── 002-default-model-selection.md
-│       ├── 003-agent-definitions.md
-│       ├── 004-herdr-socket-integration.md
-│       └── 005-file-path-prompt-delivery.md
+│       ├── 001-persistent-background-agents.md  # Agent = herdr tab 中后台持久的 Pi session；不复活、不建信箱
+│       ├── 002-default-model-selection.md       # 模型解析：显式参数 > definition > 继承 Primary
+│       ├── 003-agent-definitions.md             # 显式项目 definition 选择 + 单扩展双角色
+│       ├── 004-herdr-socket-integration.md      # Protocol 17：独立 RPC socket、事件流重连与 snapshot 对账
+│       └── 005-file-path-prompt-delivery.md     # 短 argv 纪律；prompt 走文件路径与 promptGuidelines
 ├── scripts/
 │   └── verify-package.mjs                 # npm dry-run 打包清单与编译入口 smoke 校验
 ├── src/
@@ -68,6 +68,14 @@ When changing an Accepted design before the first npm release, make the direct m
 ### Documentation Intent Principle
 
 When implementation disagrees with an Accepted ADR because a platform API behaves differently, update the ADR and user documentation in the same change. Keep detailed lifecycle and error semantics in `docs/`; keep README focused on getting started plus the user-facing Herdr RPC support matrix.
+
+### Code Design
+
+When adding TypeScript implementation, follow _A Philosophy of Software Design_: prefer deep modules with small public surfaces, keep substantial functions at least 20 lines when the logic belongs together, and prefer established library helpers over custom helper proliferation.
+
+When a formatter changes files in scope, keep its output. Do not manually roll back formatter-owned changes.
+
+Do not run `git diff --check` in this repository.
 
 ## Operation Guide
 
