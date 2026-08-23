@@ -59,7 +59,7 @@ SendMessage 不提供 `steer` / `followUp` 参数。消息在目标 pi 中的实
 
 reply address 是 live 地址。发送方关闭、移动到新 pane 或更名后，旧 reply 地址可能失效；接收方可以重新调用 `ListAgents` 查找当前目标。pi-herdr 不维护稳定的 offline reply identity。
 
-Agent 完成工作后按 system prompt 使用 `SendMessage` 回复：
+Agent 完成工作后按 `SendMessage` 工具的 prompt guidelines 回复：
 
 ```typescript
 SendMessage({
@@ -69,6 +69,8 @@ SendMessage({
 ```
 
 结果没有独立 store、消费协议或完成通知抑制。一次回复是否成功只取决于 reply target 当时是否 live。
+
+回复通过 Herdr 打字进目标 Pi TUI,按 steering 语义在接收方当前回合结束后送达。发送方因此不应 sleep 或轮询等待回复:结束当前回合,回复会作为新的 steering 消息自动开始下一轮。
 
 ## Delivery and Failures
 

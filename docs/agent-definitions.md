@@ -1,6 +1,6 @@
 # Agent Definitions
 
-Agent definition 是带 YAML frontmatter 的 Markdown 文件。Frontmatter 决定创建时的模型、工具和资源配置，正文追加到公共 Agent system prompt，用于定义角色行为。
+Agent definition 是带 YAML frontmatter 的 Markdown 文件。Frontmatter 决定创建时的模型、工具和资源配置；body 非空时，definition 文件的绝对路径通过 `--append-system-prompt` 传给 spawned Pi（Pi 识别文件路径参数并读入内容，frontmatter 一并进入 system prompt），用于定义角色行为。
 
 Definition 只在 `Agent` 创建时解析。文件之后发生变化不会热更新已经 live 的 Agent。
 

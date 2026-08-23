@@ -248,3 +248,21 @@ Then("an unavailable explicit model override is rejected", function (this: PiHer
 	assert.ok(error instanceof Error);
 	assert.match(error.message, /override did not match an authenticated, enabled model/);
 });
+
+When("a launch plan is resolved for a definition at a deep multi-byte path", function (this: PiHerdrWorld) {
+	const runtime = new AgentRuntime("/package/dist/index.js");
+	const context = this.state.get("modelContext") as ExtensionContext;
+	const definition = this.state.get("customDefinition") as ResolvedAgentDefinition;
+	const deepPath = `/project/${"深目录/".repeat(80)}${"agents/".repeat(60)}worker.md`;
+	try {
+		runtime.resolveLaunchPlan("worker", { ...definition, path: deepPath }, {}, context);
+	} catch (error) {
+		this.state.set("oversizedPlanError", error);
+	}
+});
+
+Then("the launch plan rejects the oversized argv with a tty budget error", function (this: PiHerdrWorld) {
+	const error = this.state.get("oversizedPlanError");
+	assert.ok(error instanceof Error, "oversized argv error must be recorded");
+	assert.ok(String(error.message).includes("tty safety budget"), String(error));
+});
