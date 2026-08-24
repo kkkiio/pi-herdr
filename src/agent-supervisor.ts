@@ -107,7 +107,7 @@ export class AgentSupervisor {
 			throw new Error("cwd must contain visible text when provided.");
 		}
 		if (typeof request.name !== "string" || !/^[a-z][a-z0-9_-]{0,31}$/.test(request.name)) {
-			throw new Error("Agent name must match [a-z][a-z0-9_-]{0,31].");
+			throw new Error("Agent name must match [a-z][a-z0-9_-]{0,31}.");
 		}
 		if (ctx.signal?.aborted) throw new Error("Agent launch was cancelled before resources were created.");
 		await this.initialize();
