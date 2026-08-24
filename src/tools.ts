@@ -25,17 +25,19 @@ export function registerAgentTools(
 			"Launch a persistent background Agent in a new Herdr tab. Returns after startup and initial prompt delivery, not after the work finishes. Use ListAgents and SendMessage for later interaction.",
 		promptSnippet: "Launch a persistent background Agent in Herdr.",
 		promptGuidelines: [
-			"When a project-specific role would help, prefer checking the task-relevant repository's .agents/agents directories and pass the selected Markdown path explicitly; otherwise use a catalog definition.",
+			"When a project-specific role would help, prefer checking the task-relevant repository's .agents/agents directories and pass the selected Markdown path explicitly. Use a catalog definition only when one of the listed roles fits the task; otherwise omit `definition` to use the Pi default agent.",
 			...(modelNotes ? [modelNotes] : []),
 		],
 		parameters: Type.Object(
 			{
 				description: Type.String({ minLength: 1, description: "Short human-readable purpose." }),
 				prompt: Type.String({ minLength: 1, description: "The first concrete request for the Agent." }),
-				definition: Type.String({
-					minLength: 1,
-					description: `Catalog name or absolute/explicit relative .md path. Available catalog: ${catalogDescription}`,
-				}),
+				definition: Type.Optional(
+					Type.String({
+						minLength: 1,
+						description: `Catalog name or absolute/explicit relative .md path. Omit to launch with Pi defaults. Available catalog: ${catalogDescription}`,
+					}),
+				),
 				name: Type.String({
 					pattern: "^[a-z][a-z0-9_-]{0,31}$",
 					description: "Unique live Agent, session, and tab name.",

@@ -11,8 +11,7 @@ pi-herdr 是 TypeScript ESM Pi extension。
 ├── AGENTS.md                              # 开发 Agent 的项目规则与操作指南
 ├── README.md                              # 用户入口、安装状态和最短使用示例
 ├── agents/                                # Bundled Agent definitions；npm 发布资源
-│   ├── explorer.md                        # 带 Bash 的只读搜索 Agent
-│   └── general-purpose.md                 # 具备完整工作工具的通用 Agent
+│   └── explorer.md                        # 带 Bash 的只读搜索 Agent；省略 definition 即为 Pi 默认 Agent
 ├── assets/
 │   └── pi-herdr-logo.png                  # README 品牌图
 ├── .github/
@@ -28,8 +27,6 @@ pi-herdr 是 TypeScript ESM Pi extension。
 │       ├── 003-agent-definitions.md             # 显式项目 definition 选择 + 单扩展双角色
 │       ├── 004-herdr-socket-integration.md      # Protocol 17：独立 RPC socket、事件流重连与 snapshot 对账
 │       └── 005-file-path-prompt-delivery.md     # 短 argv 纪律；prompt 走文件路径与 promptGuidelines
-├── scripts/
-│   └── verify-package.mjs                 # npm dry-run 打包清单与编译入口 smoke 校验
 ├── src/
 │   ├── index.ts                           # 单 extension 入口与工具装配
 │   ├── agent-definitions.ts               # Definition catalog、显式路径与严格 YAML 解析
@@ -40,7 +37,8 @@ pi-herdr 是 TypeScript ESM Pi extension。
 │   ├── tools.ts                           # 四个 Pi tool 的 schema 与注册
 │   └── ui.ts                              # `/agents` live runtime UI
 ├── test/
-│   └── bdd/                               # Cucumber 全量回归 features/steps/support；@herdr-e2e 为真机场景
+│   ├── bdd/                               # Cucumber 全量回归 features/steps/support；@herdr-e2e 为真机场景
+│   └── verify-package.mjs                 # 真实安装冒烟：pack → 干净目录 --omit=dev 安装 → 加载入口与 bundled 定义
 ├── cucumber.mjs                           # BDD profile 与 TypeScript support 配置
 ├── tsconfig.json                          # NodeNext build/typecheck 配置
 └── package.json                           # npm/Pi manifest 与 canonical scripts

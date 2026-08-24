@@ -149,7 +149,6 @@ When("the Primary begins launching the shared Agent", async function (this: PiHe
 			{
 				description: "Implement the feature",
 				prompt: "Build it & report <tests>.",
-				definition: "general-purpose",
 				name: "worker",
 			},
 			context,
@@ -210,7 +209,6 @@ When("the Primary launches the worktree Agent", async function (this: PiHerdrWor
 			{
 				description: "Isolated implementation",
 				prompt: "Implement in an isolated checkout.",
-				definition: "general-purpose",
 				name: "worker",
 				isolation: "worktree",
 			},
@@ -243,7 +241,6 @@ When("the Primary attempts to launch the worktree Agent", async function (this: 
 			{
 				description: "Risky isolated implementation",
 				prompt: "This prompt will be rejected.",
-				definition: "general-purpose",
 				name: "worker",
 				isolation: "worktree",
 			},

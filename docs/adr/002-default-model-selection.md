@@ -5,7 +5,7 @@
 
 ## Context
 
-长期 live Explorer 会被多次复用。如果它总是以 调用方的高成本模型启动，简单只读搜索可能产生不必要成本；General Purpose Agent 通常更适合继承调用方能力。
+长期 live Explorer 会被多次复用。如果它总是以 调用方的高成本模型启动，简单只读搜索可能产生不必要成本；省略 `definition` 的默认 Agent 则继承调用方模型，保持能力。
 
 模型配置只需要决定新 session 的初始状态。Agent 启动后，用户仍应保留 pi 原生 `/model` 等控制能力，而不是由 pi-herdr 锁定模型。
 
@@ -23,11 +23,11 @@ model:
 
 数组按顺序选择第一个当前可用候选。
 
-### 2. Explorer 与 General Purpose 默认值
+### 2. Explorer 默认值与缺省继承
 
 Bundled explorer 优先使用 `gpt-5.6-luna`，其次使用 `deepseek-v4-flash`。Definition 候选均不可用时继承调用方当前模型。
 
-Bundled general-purpose 不指定 model，因此初始模型直接继承调用方当前模型。
+省略 definition 时不施加任何覆盖：初始模型直接继承调用方当前模型，Pi 使用默认 system prompt 与全部工作工具。
 
 ### 3. Selection precedence
 
@@ -62,7 +62,7 @@ pi-herdr 不监听或回滚模型变化，也不要求为不同模型创建新 A
 
 ### Positive
 
-- Explorer 默认节省成本，General Purpose 默认保持能力。
+- Explorer 默认节省成本，省略 `definition` 的默认 Agent 保持能力。
 - 显式调用错误可立即发现，definition 偏好仍能平滑回退。
 - live Agent 与普通 pi session 一样可由用户调整模型。
 

@@ -12,7 +12,7 @@ import type { AgentInfo, HerdrEvent, SessionSnapshot } from "./herdr-types.js";
 export interface LaunchAgentRequest extends AgentOverrides {
 	description: string;
 	prompt: string;
-	definition: string;
+	definition?: string;
 	name: string;
 	cwd?: string;
 	isolation?: "worktree";
@@ -98,12 +98,10 @@ export class AgentSupervisor {
 		if (
 			typeof request.description !== "string" ||
 			typeof request.prompt !== "string" ||
-			typeof request.definition !== "string" ||
 			!request.description.trim() ||
-			!request.prompt.trim() ||
-			!request.definition.trim()
+			!request.prompt.trim()
 		) {
-			throw new Error("description, prompt, and definition must contain visible text.");
+			throw new Error("description and prompt must contain visible text.");
 		}
 		if (request.cwd !== undefined && (typeof request.cwd !== "string" || !request.cwd.trim())) {
 			throw new Error("cwd must contain visible text when provided.");
