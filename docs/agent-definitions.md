@@ -26,7 +26,7 @@ Catalog name 不包含 `/`、`\`，也不以 `.md` 结尾，匹配大小写不�
 - `<project>/.pi/agents/*.md`
 - `<project>/.agents/agents/*.md`
 
-找到合适角色后，调用方把绝对路径或以 `./`、`../` 开头的显式相对路径传给 `definition`。相对路径以调用 `Agent` 时的 cwd 为基准；pi-herdr 规范化路径并要求目标是带 `.md` 后缀的普通文件。Definition 路径是精确选择，不参与 catalog 的覆盖或回退。没有合适项目角色时直接使用 catalog；项目目录检查不是创建前置条件。
+找到合适角色后，调用方把绝对路径或以 `./`、`../` 开头的显式相对路径传给 `definition`。相对路径以调用 `Agent` 时的 cwd 为基准；pi-herdr 规范化路径并要求目标是带 `.md` 后缀的普通文件。Definition 路径是精确选择，不参与 catalog 的覆盖或回退。没有合适项目角色时省略 `definition`，使用 Pi 默认 agent；catalog definition 只在列出的角色恰好匹配任务时使用（如只读 Explorer）。项目目录检查不是创建前置条件。
 
 Definition path 只决定角色配置，不隐式改变新 Agent 的 workspace 或 cwd。`cwd` 是独立的 `Agent` 参数；它与相对 definition path 分别基于调用时的 cwd 解析，二者不互相推导或校验。
 
