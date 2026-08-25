@@ -405,7 +405,7 @@ export class AgentSupervisor {
 		target: string,
 		options: { source?: AgentReadSource; lines?: number } = {},
 		signal?: AbortSignal,
-	): Promise<{ agent: AgentInfo; read: AgentReadResult["read"] }> {
+	): Promise<AgentReadResult["read"]> {
 		if (typeof target !== "string" || !target.trim()) {
 			throw new Error("agent must contain visible text.");
 		}
@@ -418,11 +418,12 @@ export class AgentSupervisor {
 		}
 		await this.initialize();
 		if (signal?.aborted) throw new Error("Agent read was cancelled before it started.");
-		const [targetResult, readResult] = await Promise.all([
-			this.client.requestRead("agent.get", { target }, signal),
-			this.client.requestRead("agent.read", { target, source, lines: options.lines ?? null }, signal),
-		]);
-		return { agent: targetResult.agent, read: readResult.read };
+		const result = await this.client.requestRead(
+			"agent.read",
+			{ target, source, lines: options.lines ?? null },
+			signal,
+		);
+		return result.read;
 	}
 
 	async send(

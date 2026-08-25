@@ -13,8 +13,8 @@ Feature: Live Agent discovery and messaging
     Then Herdr resolves both supplied routes
     And each prompt prefers the target name and preserves a verbatim reply envelope
 
-  Scenario: ReadAgent returns the target screen with its live status
+  Scenario: ReadAgent returns the target screen text
     Given a protocol 17 Herdr with one readable target
     When the Primary reads the target screen with an explicit source and row limit
     Then Herdr receives an agent.read with the requested source and rows
-    And the read result carries the screen text and the target status
+    And the read result carries the screen text

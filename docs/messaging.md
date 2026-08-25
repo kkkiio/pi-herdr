@@ -34,9 +34,10 @@ ReadAgent({
   agent: string,                    // live Agent name 或 pane ID
   source?: "visible" | "recent" | "recent_unwrapped" | "detection",  // 默认 "recent"
   lines?: number,                   // recent 类 source 的尾部行数，默认 80
-}) => { agent: AgentInfo, read: { text, source, truncated, ... } }
+}) => { text, source, pane_id, tab_id, workspace_id, truncated, ... }
 ```
 
+- 返回的文本就是 Agent 自己的 TUI 实况，包括输入队列、审批提示和 working 指示；不叠加 herdr 检测状态。
 - 读取是被动的：不改变 Agent 状态，也不把 `done` 标记为已读。
 - Agent 正在工作或 blocked 时，需要翻页的 `recent` 读取可能返回 `agent_not_idle`；改用 `source: "visible"` 或等 idle 后重试。
 - `detection` 返回 herdr 用于状态分类的快照，适合排查状态识别问题。
