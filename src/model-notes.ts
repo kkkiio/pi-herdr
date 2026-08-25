@@ -1,35 +1,58 @@
+/** Fixed comparison axes; "unknown" must be explicit, never guessed. */
+export type ModelSize = "small" | "medium" | "big";
+export type ModelPrice = "cheap" | "moderate" | "expensive" | "unknown";
+export type ModelSpeed = "fast" | "moderate" | "slow" | "unknown";
+
 export interface ModelNote {
-	/** For the chooser: what the model is good at, speed, working style. */
-	capacity: string;
+	size: ModelSize;
+	price: ModelPrice;
+	speed: ModelSpeed;
+	/** Free-form differentiators beyond the fixed axes: capability ceiling, working style, best use. */
+	traits: string;
 	/** For the receiver: how much to trust its conclusions. Omitted when there is nothing actionable. */
 	soundness?: string;
 }
 
 /**
- * Delegation heuristics for specific models. `capacity` is surfaced in the
- * Agent tool guidelines when the model is available; `soundness` travels in
- * message envelopes so receivers can calibrate trust.
+ * Delegation heuristics for specific models. The fixed axes plus `traits`
+ * are surfaced in the Agent tool guidelines when the model is available;
+ * `soundness` travels in message envelopes so receivers can calibrate trust.
  *
  * These are experience notes, not benchmarks: keep them hedged, keep the
  * list short, and revisit entries when models change.
  */
 export const MODEL_NOTES: Record<string, ModelNote> = {
 	"deepseek-v4-flash": {
-		capacity: "small model. fast, but often reaches wrong conclusions too quickly",
+		size: "small",
+		price: "cheap",
+		speed: "fast",
+		traits: "often reaches wrong conclusions too quickly",
 		soundness: "verify its conclusions before acting on them",
 	},
 	"gpt-5.6-luna": {
-		capacity: "small model. extremely cheap even at max thinking; good for parallel fan-out of simple tasks, but slow",
+		size: "small",
+		price: "cheap",
+		speed: "slow",
+		traits:
+			"stays cheap even at max thinking, where it handles medium problems better than deepseek-v4-flash; fan out simple-to-medium tasks in parallel",
 	},
 	"gpt-5.6-terra": {
-		capacity: "medium model. capable and rigorous, but slow and may not solve hard problems",
+		size: "medium",
+		price: "moderate",
+		speed: "slow",
+		traits: "capable and rigorous, but may not solve hard problems",
 	},
 	"kimi-3": {
-		capacity: "big model. very smart and strong at frontend and visual tasks, but slow",
+		size: "big",
+		price: "moderate",
+		speed: "slow",
+		traits: "very smart and strong at frontend and visual tasks",
 	},
 	"gpt-5.6-sol": {
-		capacity:
-			"big model. very smart and rigorous, but expensive and tends to add self-justifying docs and tests that pollute project context",
+		size: "big",
+		price: "expensive",
+		speed: "unknown",
+		traits: "very smart and rigorous; tends to add self-justifying docs and tests that pollute project context",
 	},
 };
 
@@ -37,6 +60,11 @@ export const MODEL_NOTES: Record<string, ModelNote> = {
 // "." and "-" are equivalent.
 function normalizeModelId(id: string): string {
 	return id.toLowerCase().replace(/[.-]/g, "");
+}
+
+/** Renders the fixed axes that have known values, e.g. "small · cheap · slow". */
+function axisLine(note: ModelNote): string {
+	return [note.size, note.price, note.speed].filter((axis) => axis !== "unknown").join(" · ");
 }
 
 /**
@@ -47,7 +75,7 @@ export function availableModelNotes(availableModelIds: readonly string[]): strin
 	const available = new Set(availableModelIds.map(normalizeModelId));
 	const notes = Object.entries(MODEL_NOTES).filter(([id]) => available.has(normalizeModelId(id)));
 	if (!notes.length) return undefined;
-	return `Available model notes for Agent({model}): ${notes.map(([id, note]) => `${id} — ${note.capacity}`).join("; ")}.`;
+	return `Available model notes for Agent({model}): ${notes.map(([id, note]) => `${id} — ${axisLine(note)}; ${note.traits}`).join("; ")}.`;
 }
 
 /** Calibration hint for a model ("provider/id" or bare id), if one exists. */
