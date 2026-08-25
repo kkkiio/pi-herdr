@@ -1,6 +1,6 @@
 /** Fixed comparison axes; "unknown" must be explicit, never guessed. */
 export type ModelSize = "small" | "medium" | "big";
-export type ModelPrice = "cheapest" | "cheap" | "moderate" | "expensive" | "unknown";
+export type ModelPrice = "cheap" | "moderate" | "expensive" | "unknown";
 export type ModelSpeed = "fast" | "moderate" | "slow" | "unknown";
 
 export interface ModelNote {
@@ -31,7 +31,7 @@ export const MODEL_NOTES: Record<string, ModelNote> = {
 	},
 	"gpt-5.6-luna": {
 		size: "small",
-		price: "cheapest",
+		price: "cheap",
 		speed: "slow",
 		traits:
 			"stays cheap even at max thinking, where it handles medium problems better than deepseek-v4-flash; fan out well-specified, easily verified tasks in parallel",
