@@ -34,7 +34,7 @@ export const MODEL_NOTES: Record<string, ModelNote> = {
 		price: "cheapest",
 		speed: "slow",
 		traits:
-			"stays cheap even at max thinking, where it handles medium problems better than deepseek-v4-flash; fan out simple-to-medium tasks in parallel",
+			"stays cheap even at max thinking, where it handles medium problems better than deepseek-v4-flash; fan out well-specified, easily verified tasks in parallel",
 	},
 	"gpt-5.6-terra": {
 		size: "medium",
