@@ -28,6 +28,9 @@ export type RequestHandler = (
 export interface FakeHerdrServerOptions {
 	bootstrap?: boolean;
 	liveAgents?: () => AgentInfo[];
+	/** Reported in ping/snapshot replies; defaults to the minimum supported contract. */
+	protocol?: number;
+	version?: string;
 }
 
 interface RequestWaiter {
@@ -89,7 +92,11 @@ export class FakeHerdrServer {
 						waiter.resolve(matches[waiter.count - 1] as RecordedRequest);
 					}
 					if (options.bootstrap !== false && request.method === "ping") {
-						this.reply(socket, request, { type: "pong", version: "0.7.5", protocol: 17 });
+						this.reply(socket, request, {
+							type: "pong",
+							version: options.version ?? "0.7.5",
+							protocol: options.protocol ?? 17,
+						});
 						continue;
 					}
 					if (options.bootstrap !== false && request.method === "session.snapshot") {
@@ -128,8 +135,8 @@ export class FakeHerdrServer {
 						this.reply(socket, request, {
 							type: "session_snapshot",
 							snapshot: {
-								version: "0.7.5",
-								protocol: 17,
+								version: options.version ?? "0.7.5",
+								protocol: options.protocol ?? 17,
 								workspaces,
 								tabs,
 								panes,

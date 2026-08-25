@@ -5,8 +5,8 @@ import http from "node:http";
 import { createConnection, type Socket } from "node:net";
 import { join } from "node:path";
 
-const HERDR_PROTOCOL = 17;
-const HERDR_VERSION = "0.7.5";
+const MIN_HERDR_PROTOCOL = 17;
+const MIN_HERDR_VERSION = "0.7.5";
 
 /** Single source of truth for e2e stage budgets; step timeouts derive from these. */
 export const E2E_STAGE = {
@@ -154,7 +154,7 @@ export class HerdrHarness {
 		const version = spawnSync(configured, ["--version"], { encoding: "utf8" });
 		if (version.error) {
 			throw new Error(
-				`Real Herdr e2e requires the herdr binary (${HERDR_VERSION}); install it or set HERDR_BIN. Cause: ${version.error.message}`,
+				`Real Herdr e2e requires the herdr binary (${MIN_HERDR_VERSION}+); install it or set HERDR_BIN. Cause: ${version.error.message}`,
 			);
 		}
 		const lookup = spawnSync("/bin/sh", ["-c", `command -v -- "${configured}"`], { encoding: "utf8" });
@@ -165,9 +165,9 @@ export class HerdrHarness {
 			harness.spawnServer(options.piBinDir, options.shell);
 			await harness.waitForSocket(E2E_STAGE.serverBoot);
 			const pong = await harness.rpc("ping", {});
-			if (pong.protocol !== HERDR_PROTOCOL) {
+			if (typeof pong.protocol !== "number" || pong.protocol < MIN_HERDR_PROTOCOL) {
 				throw new Error(
-					`Real Herdr at ${harness.herdrBin} spoke protocol ${String(pong.protocol)} (version ${String(pong.version)}); pi-herdr targets protocol ${HERDR_PROTOCOL}.`,
+					`Real Herdr at ${harness.herdrBin} spoke protocol ${String(pong.protocol)} (version ${String(pong.version)}); pi-herdr requires protocol ${MIN_HERDR_PROTOCOL} or newer.`,
 				);
 			}
 		} catch (error) {

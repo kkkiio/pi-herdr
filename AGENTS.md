@@ -30,7 +30,7 @@ pi-herdr 是 TypeScript ESM Pi extension。
 ├── src/
 │   ├── index.ts                           # 单 extension 入口与工具装配
 │   ├── agent-definitions.ts               # Definition catalog、显式路径与严格 YAML 解析
-│   ├── agent-runtime.ts                   # Pi 启动参数、模型、prompt 与 rename
+│   ├── agent-runtime.ts                   # Pi 启动参数、模型与 prompt
 │   ├── agent-supervisor.ts                # Live ownership、创建事务与工具语义
 │   ├── herdr-client.ts                    # 独立 RPC socket、event stream 与只读重试
 │   ├── herdr-types.ts                     # Herdr protocol 17 wire types
@@ -49,7 +49,7 @@ pi-herdr 是 TypeScript ESM Pi extension。
 - **Agent** — 在 herdr tab 的受管 pane 中运行的持久后台 pi 会话；由另一个会话通过 `Agent` 工具创建，能力与创建者相同。
 - **Creator / 创建者** — 调用 `Agent` 工具创建另一个 Agent 的会话；创建只是内存中的事实记录，不带来管理权限。
 - **Agent definition** — 用户级/bundled catalog 中按名称选择，或由调用方从项目 `.pi/agents`、`.agents/agents` 显式选择路径的角色配置与 prompt。
-- **Agent name** — 同时用作 pi session name、herdr live Agent alias 和 tab label；live 时可通过 `/name` 同步修改。
+- **Agent name** — herdr live Agent alias；创建 Agent 时也用作专用 tab 的初始 label。
 - **Agent tab** — 一个 Agent 在 herdr 中的用户可见容器。
 - **Managed pane** — Agent tab 内实际运行 pi 进程、承载 herdr lifecycle state 的 pane。
 - **Peer** — herdr 当前可达、但不是由当前会话创建的其他 pi 会话。

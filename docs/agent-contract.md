@@ -2,7 +2,7 @@
 
 pi-herdr 是 Pi 与 Herdr 之间的适配层：它把 Herdr 的能力以 Pi 工具和消息约定的形式暴露，不拥有或管理 Agent 的生命周期——生命周期归 Herdr（pane/tab）和用户。
 
-任何运行在 Herdr 中、加载了 pi-herdr 的 Pi 会话都获得相同的控制表面（`Agent`、`ListAgents`、`SendMessage`、`/agents` 与 name 同步）。通过 `Agent` 创建的 Agent 是独立 Herdr tab 的受管 pane 中运行的后台 Pi 会话，使用正常落盘的全新 session；完成一次请求后保持 idle，保留上下文并等待后续消息。它与创建者的唯一区别是"被谁创建"这一事实，工具能力完全相同——包括继续创建别的 Agent。
+任何运行在 Herdr 中、加载了 pi-herdr 的 Pi 会话都获得相同的控制表面（`Agent`、`ListAgents`、`SendMessage` 与 `/agents`）。通过 `Agent` 创建的 Agent 是独立 Herdr tab 的受管 pane 中运行的后台 Pi 会话，使用正常落盘的全新 session；完成一次请求后保持 idle，保留上下文并等待后续消息。它与创建者的唯一区别是"被谁创建"这一事实，工具能力完全相同——包括继续创建别的 Agent。
 
 ```text
 Herdr live session
@@ -52,7 +52,7 @@ Agent({
 - `description` 是工具结果与 UI 详情中的简短说明，不参与 tab label。
 - `prompt` 是第一条消息，使用与 `SendMessage` 相同的 `<from ...>` envelope。
 - `definition` 可选：接受 catalog name，或以 `.md` 结尾的绝对路径、显式相对路径；完整选择与解析规则见 [Agent Definitions](agent-definitions.md)。省略时使用 Pi 默认配置，不加任何裁剪或 prompt 覆盖。
-- `name` 同时作为 Pi session name、Herdr live route name 和 tab label，必须符合 `[a-z][a-z0-9_-]{0,31}`。
+- `name` 是唯一的 Herdr live route name，并作为新 Agent tab 的初始 label；必须符合 `[a-z][a-z0-9_-]{0,31}`。
 - `model` 与 `thinking` 覆盖 definition 的初始值；启动后仍可使用 Pi 原生能力修改。
 - `cwd` 选择新 Agent 的工作目录；相对路径以调用时的 cwd 为基准，未设置时继承该 cwd。
 - `isolation: "worktree"` 从解析后的 `cwd` 创建独立 worktree workspace；未设置时在共享 workspace 中创建使用该 cwd 的 tab。
@@ -61,7 +61,7 @@ Definition path 只选择角色配置，不改变 workspace 或 cwd。相对 def
 
 ## Uniform Extension Surface
 
-所有 Herdr 内的 Pi 会话运行同一个 pi-herdr extension 入口，注册相同的工具表面、name 同步与 `/agents`。创建新 Agent 时 `agent.start.args` 只携带短 flag（`--name`、`--extension`、模型与工具参数、definition 文件路径），不传任何角色标记。
+所有 Herdr 内的 Pi 会话运行同一个 pi-herdr extension 入口，注册相同的工具表面与 `/agents`。创建新 Agent 时 `agent.start.args` 只携带短 flag（`--extension`、模型与工具参数、definition 文件路径），不传任何角色标记。
 
 递归创建（Agent 创建 Agent）不受限制。实践中 Agent 没有主动递归创建的倾向；即使发生，代价只是一个可见、可关闭的 tab。Definition 加载的普通 extensions 与 skills 不改变 pi-herdr 自己的工具表面。
 
@@ -72,13 +72,13 @@ Definition path 只选择角色配置，不改变 workspace 或 cwd。相对 def
 共享 workspace 创建流程：
 
 1. 校验 Herdr 环境、配置、definition selector、cwd、name 和初始模型。
-2. `tab.create` 使用解析后的 cwd 创建不抢焦点的 tab，并返回 root pane。
+2. `tab.create` 使用解析后的 cwd 和 Agent name 创建不抢焦点的 tab，并返回 root pane。
 3. `agent.start` 在 root pane 中启动全新、持久的 Pi session；definition 配置通过 Pi args 传入。
 4. 只用 `agent.get` 轮询，直到 `launch_pending: false` 且 `interactive_ready: true`。
 5. `agent.prompt` 投递带 `<from ...>` envelope 的初始请求。
 6. 只有 prompt 被 Herdr 接受后才记录 ownership，并返回 `launched`。
 
-Worktree 隔离用传入同一 cwd 的 `worktree.create` 替换第 2 步，直接复用返回的 workspace、tab 与 root pane，再显式调用 `tab.rename` 同步 Agent name；不会额外创建第二个 tab。Definition 文件位置不参与 workspace 或 worktree 选择。
+Worktree 隔离用传入同一 cwd 的 `worktree.create` 替换第 2 步，直接复用返回的 workspace、tab 与 root pane，再显式调用 `tab.rename` 设置初始 Agent tab label；不会额外创建第二个 tab。Definition 文件位置不参与 workspace 或 worktree 选择。
 
 raw `agent.start` 成功只表示 launch 已提交，不表示 Pi 已经可以接收 prompt；`Agent` 返回 `launched` 也只表示初始 prompt 被接受，不等待 Agent 完成本轮工作。
 
@@ -92,16 +92,11 @@ close 结果不确定时保留 session，不扫描目录或根据 name 猜测文
 
 ## Name and Identity
 
-Pi session name 是持久显示名，Herdr Agent name 是 live route，tab label 是 UI 名称；Agent live 时三者保持一致。name 在 live Agent 中必须唯一，已经关闭的 session 不继续占用该 name。
+Herdr Agent name 是 live route，在创建时必须唯一，并用于初始化专用 tab 的 label。已经关闭的 session 不继续占用该 route name。
 
-所有加载 pi-herdr 的会话都监听 `session_info_changed`。用户执行 `/name` 后：
+Pi session name 是 Pi 管理的持久显示名，tab label 是 Herdr 管理的 UI 名称。用户可以分别使用 Pi 的 `/name` 和 Herdr 的 tab 管理能力修改它们；消息寻址仍使用 Herdr 返回的 live Agent name 或 pane ID。
 
-1. 校验新名字格式，并通过 Herdr 检查 live 唯一性。
-2. 以稳定的 live `pane_id` 调用 `agent.rename`。
-3. 调用 `tab.rename` 同步 tab label。
-4. 任一步失败时，带重入保护地恢复已经修改的 Herdr surface 和原 Pi session name。
-
-Ownership 记录使用 pane ID 作为稳定键，name 只是可变的路由属性。
+Ownership 记录使用 pane ID 作为稳定键，Agent name 是 live 路由属性。
 
 ## Ownership and Lifecycle
 

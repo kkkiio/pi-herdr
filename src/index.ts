@@ -3,15 +3,26 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import { AgentDefinitionStore } from "./agent-definitions.js";
-import { AgentRuntime, NameSynchronizer } from "./agent-runtime.js";
+import { AgentRuntime } from "./agent-runtime.js";
 import { AgentSupervisor } from "./agent-supervisor.js";
 import { HerdrClient } from "./herdr-client.js";
 import { registerAgentTools } from "./tools.js";
 import { registerAgentsUi } from "./ui.js";
 
+type HerdrConnectionState = "connecting" | "connected" | "reconnecting" | "down";
+
+function describeError(error: unknown): string {
+	const messages: string[] = [];
+	let current: unknown = error;
+	while (current instanceof Error && !messages.includes(current.message)) {
+		messages.push(current.message);
+		current = current.cause;
+	}
+	return messages.length > 0 ? messages.join(" — ") : String(error);
+}
+
 export default function piHerdrExtension(pi: ExtensionAPI): void {
 	let supervisor: AgentSupervisor | undefined;
-	let nameSynchronizer: NameSynchronizer | undefined;
 	let controlPlaneRegistered = false;
 	pi.on("session_start", async (_event, ctx) => {
 		if (process.env.HERDR_ENV !== "1" || controlPlaneRegistered) return;
@@ -23,13 +34,39 @@ export default function piHerdrExtension(pi: ExtensionAPI): void {
 		}
 
 		controlPlaneRegistered = true;
+		let connectionState: HerdrConnectionState = "connecting";
+		const setConnectionState = (state: HerdrConnectionState): void => {
+			connectionState = state;
+			const theme = ctx.ui.theme;
+			const text =
+				state === "connected"
+					? theme.fg("success", "herdr ●")
+					: state === "connecting"
+						? theme.fg("dim", "herdr …")
+						: state === "reconnecting"
+							? theme.fg("warning", "herdr ↻ reconnecting")
+							: theme.fg("error", "herdr ✕ disconnected");
+			ctx.ui.setStatus("pi-herdr", text);
+		};
+		setConnectionState("connecting");
 		const client = new HerdrClient(socketPath, {
-			onEventError: (error) => ctx.ui.notify(`pi-herdr event stream: ${error.message}`, "warning"),
+			onEventError: (error) => {
+				if (connectionState === "reconnecting" || connectionState === "down") return;
+				setConnectionState("reconnecting");
+				ctx.ui.notify(
+					`pi-herdr event stream: ${describeError(error)} Reconnecting in the background; further failures appear in the status line.`,
+					"warning",
+				);
+			},
 			onEventReady: async (reconnected) => {
-				if (!supervisor) return;
-				await supervisor.initialize();
-				if (!reconnected) return;
-				await supervisor.refresh();
+				if (supervisor) {
+					await supervisor.initialize();
+					if (reconnected) await supervisor.refresh();
+				}
+				if (connectionState === "reconnecting" || connectionState === "down") {
+					ctx.ui.notify("pi-herdr reconnected to the Herdr event stream.", "info");
+				}
+				setConnectionState("connected");
 			},
 		});
 		const definitions = new AgentDefinitionStore();
@@ -39,13 +76,6 @@ export default function piHerdrExtension(pi: ExtensionAPI): void {
 		const availableModelIds = ctx.modelRegistry.getAvailable().map((model) => model.id);
 		registerAgentTools(pi, supervisor, catalog.entries, availableModelIds);
 		registerAgentsUi(pi, supervisor);
-		nameSynchronizer = new NameSynchronizer(
-			pi,
-			client,
-			callerPaneId,
-			(message, level) => ctx.ui.notify(message, level),
-			() => supervisor!.initialize(),
-		);
 		for (const diagnostic of catalog.diagnostics) ctx.ui.notify(diagnostic, "error");
 		const diagnostic = await supervisor.configurationDiagnostic(ctx.cwd);
 		if (diagnostic) ctx.ui.notify(diagnostic, "error");
@@ -61,21 +91,15 @@ export default function piHerdrExtension(pi: ExtensionAPI): void {
 		void client
 			.startEvents((event) => supervisor?.handleEvent(event))
 			.catch((error) => {
-				ctx.ui.notify(
-					`pi-herdr could not subscribe to Herdr events: ${error instanceof Error ? error.message : String(error)}`,
-					"warning",
-				);
+				setConnectionState("down");
+				ctx.ui.notify(`pi-herdr could not subscribe to Herdr events: ${describeError(error)}`, "warning");
 			});
 	});
 
-	pi.on("session_info_changed", async (event) => {
-		await nameSynchronizer?.handle(event.name);
-	});
-
-	pi.on("session_shutdown", async () => {
+	pi.on("session_shutdown", async (_event, ctx) => {
+		ctx.ui.setStatus("pi-herdr", undefined);
 		supervisor?.dispose();
 		supervisor = undefined;
-		nameSynchronizer = undefined;
 	});
 }
 
@@ -86,7 +110,7 @@ export type {
 	AgentDefinitionCatalogEntry,
 	ResolvedAgentDefinition,
 } from "./agent-definitions.js";
-export { AgentRuntime, NameSynchronizer } from "./agent-runtime.js";
+export { AgentRuntime } from "./agent-runtime.js";
 export type { AgentLaunchPlan, AgentOverrides, ThinkingLevel } from "./agent-runtime.js";
 export { AgentSupervisor } from "./agent-supervisor.js";
 export type { LaunchAgentRequest, ListedAgent } from "./agent-supervisor.js";

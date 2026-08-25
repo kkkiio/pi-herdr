@@ -1,6 +1,6 @@
 # Herdr RPC Integration
 
-pi-herdr 通过 Herdr 的 local socket RPC 创建、控制和观察 live Pi Agent。当前 wire contract 固定为 Herdr 0.7.5 / socket protocol 17；CLI 只用于人工诊断，不参与实现控制面。
+pi-herdr 通过 Herdr 的 local socket RPC 创建、控制和观察 live Pi Agent。wire contract 基线为 Herdr 0.7.5 / socket protocol 17；更高的 protocol 版本直接接受，不做精确匹配——Herdr 的全局 protocol 常量同时覆盖 pi-herdr 不消费的 client transport（键盘编码、bell 转发等），其 JSON RPC 面保持 additive 演进。CLI 只用于人工诊断，不参与实现控制面。
 
 ## Activation and Bootstrap
 
@@ -9,7 +9,7 @@ extension 只在 `HERDR_ENV=1` 时启用 Herdr 控制面。已经处于 Herdr �
 每次控制操作都依赖完整 bootstrap：
 
 1. `ping` 读取 Herdr version 和 protocol。
-2. `session.snapshot` 再次验证 protocol 17，并建立 live runtime 基线。
+2. `session.snapshot` 再次验证 protocol ≥ 17，并建立 live runtime 基线。
 
 两个步骤都成功后控制面才可用。暂时性的 bootstrap 失败可以由后续工具操作或 event acknowledgement 重试，但不会留下可执行部分操作的半初始化状态。protocol 不匹配时，错误包含实际 version 与 protocol。
 
@@ -40,7 +40,7 @@ Herdr push 保留各自实际 wire schema。普通 lifecycle event 使用 `pane_
 
 pi-herdr 只自动重试不会产生副作用的读取：`ping`、`session.snapshot`、`agent.list` 和 `agent.get`。启动就绪轮询也只调用 `agent.get`。
 
-`agent.start`、`agent.prompt`、rename、close、tab 和 worktree mutation 不自动重放。若 mutation 已写入 socket、但响应在返回资源 ID 前丢失，调用方无法判断服务端是否已经执行；pi-herdr 保留 unknown delivery 语义，不通过 label 或并发 snapshot 猜测资源归属。创建流程会在错误中报告可能存在的无法寻址 container residual。
+`agent.start`、`agent.prompt`、`tab.rename`、close、tab 和 worktree mutation 不自动重放。若 mutation 已写入 socket、但响应在返回资源 ID 前丢失，调用方无法判断服务端是否已经执行；pi-herdr 保留 unknown delivery 语义，不通过 label 或并发 snapshot 猜测资源归属。创建流程会在错误中报告可能存在的无法寻址 container residual。
 
 ## RPC Surface
 
@@ -52,10 +52,8 @@ pi-herdr 只自动重试不会产生副作用的读取：`ping`、`session.snaps
 | Worktree Agent container             | `worktree.create`, `tab.rename`                                                      |
 | Start Pi and wait until interactive  | `agent.start`, read-only `agent.get` polling                                         |
 | Initial and later messages           | `agent.prompt`                                                                       |
-| `/name` synchronization              | `agent.get`, `tab.get`, `agent.rename`, `tab.rename`                                 |
 | Stop runtime                         | `pane.close`                                                                         |
 | Failure rollback                     | `worktree.remove`, then `pane.close` when removal fails; `tab.close` for shared mode |
-| Caller lookup                        | `pane.current`                                                                       |
 | State and reconnect                  | `events.subscribe`, `session.snapshot`                                               |
 
 pi-herdr 对 Pi 只暴露 `Agent`、`ListAgents` 和 `SendMessage`，不包装通用 workspace、tab、pane、layout、terminal input、agent wait/read/focus、worktree cleanup、plugin/server/integration 或 notification 管理能力。

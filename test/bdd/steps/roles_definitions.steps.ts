@@ -183,10 +183,10 @@ When("launch plans are resolved from selected definition preferences", function 
 		...definition,
 		model: ["acme/not-authenticated"],
 	};
-	this.state.set("matchingPlan", runtime.resolveLaunchPlan("worker", definition, {}, context));
-	this.state.set("fallbackPlan", runtime.resolveLaunchPlan("worker", unavailableDefinition, {}, context));
+	this.state.set("matchingPlan", runtime.resolveLaunchPlan(definition, {}, context));
+	this.state.set("fallbackPlan", runtime.resolveLaunchPlan(unavailableDefinition, {}, context));
 	try {
-		runtime.resolveLaunchPlan("worker", definition, { model: "acme/not-authenticated" }, context);
+		runtime.resolveLaunchPlan(definition, { model: "acme/not-authenticated" }, context);
 		assert.fail("Expected an unavailable explicit model override to fail.");
 	} catch (error) {
 		this.state.set("explicitModelError", error);
@@ -217,7 +217,7 @@ When("a launch plan is resolved for a definition at a deep multi-byte path", fun
 	const definition = this.state.get("customDefinition") as ResolvedAgentDefinition;
 	const deepPath = `/project/${"深目录/".repeat(80)}${"agents/".repeat(60)}worker.md`;
 	try {
-		runtime.resolveLaunchPlan("worker", { ...definition, path: deepPath }, {}, context);
+		runtime.resolveLaunchPlan({ ...definition, path: deepPath }, {}, context);
 	} catch (error) {
 		this.state.set("oversizedPlanError", error);
 	}

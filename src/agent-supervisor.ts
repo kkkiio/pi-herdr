@@ -38,6 +38,14 @@ interface SupervisorConfiguration {
 	sessionDirectory: string | undefined;
 }
 
+/**
+ * Oldest supported Herdr socket protocol (Herdr 0.7.5). Newer protocols are
+ * accepted as-is: Herdr's JSON RPC surface evolves additively, while the
+ * global protocol constant also covers client transport changes pi-herdr
+ * does not consume.
+ */
+const MIN_HERDR_PROTOCOL = 17;
+
 export class AgentSupervisor {
 	private readonly owned = new Map<string, OwnedAgent>();
 	private readonly launchReservations = new Set<string>();
@@ -153,7 +161,7 @@ export class AgentSupervisor {
 			launchConfiguration === undefined ? configuration.sessionDirectory : launchConfiguration.sessionDirectory;
 		let startedAgent: AgentInfo | undefined;
 		try {
-			const plan = this.runtime.resolveLaunchPlan(request.name, definition, request, ctx);
+			const plan = this.runtime.resolveLaunchPlan(definition, request, ctx);
 			if (ctx.signal?.aborted) throw new Error("Agent launch was cancelled before resources were created.");
 
 			if (request.isolation === "worktree") {
@@ -422,11 +430,11 @@ export class AgentSupervisor {
 	}
 
 	private reconcile(snapshot: SessionSnapshot, ownedBeforeRead: ReadonlySet<string>): void {
-		if (snapshot.protocol !== 17) {
+		if (snapshot.protocol < MIN_HERDR_PROTOCOL) {
 			this.initialized = false;
 			this.protocolVerified = false;
 			this.protocolError = new Error(
-				`pi-herdr requires Herdr socket protocol 17, but the connected server reports ${snapshot.protocol} (${snapshot.version}).`,
+				`pi-herdr requires Herdr socket protocol ${MIN_HERDR_PROTOCOL} or newer (Herdr 0.7.5+), but the connected server reports ${snapshot.protocol} (${snapshot.version}).`,
 			);
 			throw this.protocolError;
 		}
@@ -479,9 +487,9 @@ export class AgentSupervisor {
 		if (this.protocolError) throw this.protocolError;
 		if (this.protocolVerified) return;
 		const result = await this.client.requestRead("ping", {}, signal);
-		if (result.protocol !== 17) {
+		if (result.protocol < MIN_HERDR_PROTOCOL) {
 			this.protocolError = new Error(
-				`pi-herdr requires Herdr socket protocol 17, but the connected server reports ${result.protocol} (${result.version}).`,
+				`pi-herdr requires Herdr socket protocol ${MIN_HERDR_PROTOCOL} or newer (Herdr 0.7.5+), but the connected server reports ${result.protocol} (${result.version}).`,
 			);
 			throw this.protocolError;
 		}

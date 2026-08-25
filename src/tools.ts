@@ -40,7 +40,7 @@ export function registerAgentTools(
 				),
 				name: Type.String({
 					pattern: "^[a-z][a-z0-9_-]{0,31}$",
-					description: "Unique live Agent, session, and tab name; must match [a-z][a-z0-9_-]{0,31}.",
+					description: "Unique live Agent name; must match [a-z][a-z0-9_-]{0,31}.",
 				}),
 				model: Type.Optional(
 					Type.Union([Type.String({ minLength: 1 }), Type.Array(Type.String({ minLength: 1 }), { minItems: 1 })]),

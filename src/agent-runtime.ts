@@ -1,8 +1,7 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import type { ResolvedAgentDefinition } from "./agent-definitions.js";
 import type { AgentInfo } from "./herdr-types.js";
-import { HerdrClient } from "./herdr-client.js";
 import { modelSoundnessNote } from "./model-notes.js";
 
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
@@ -30,7 +29,6 @@ export class AgentRuntime {
 	constructor(private readonly extensionPath: string) {}
 
 	resolveLaunchPlan(
-		agentName: string,
 		definition: ResolvedAgentDefinition,
 		overrides: AgentOverrides,
 		ctx: ExtensionContext,
@@ -85,7 +83,7 @@ export class AgentRuntime {
 			throw new Error("Cannot launch an Agent because the current session has no available model.");
 		}
 
-		const args = ["--name", agentName, "--extension", this.extensionPath];
+		const args = ["--extension", this.extensionPath];
 		// Long text must stay out of argv: Herdr delivers agent.start by typing the
 		// command into the pane shell, and tty input queues silently truncate around
 		// 1024 bytes (herdrdev/herdr#2862). Pi reads file paths for prompt flags, so
@@ -140,120 +138,5 @@ export class AgentRuntime {
 		// so the soundness hint must travel inside the envelope.
 		const noteLine = note ? `<sender-model-note>${note}</sender-model-note>\n\n` : "";
 		return `<from agent="${senderAddress}" reply-to="${senderAddress}"${modelAttribute}>\n${noteLine}${message}`;
-	}
-}
-
-export class NameSynchronizer {
-	private lastSyncedName: string | undefined;
-	private rollbackEventName: string | undefined;
-	private queue: Promise<void> = Promise.resolve();
-
-	constructor(
-		private readonly pi: ExtensionAPI,
-		private readonly client: HerdrClient,
-		private readonly callerPaneId: string,
-		private readonly notify: (message: string, level: "info" | "warning" | "error") => void,
-		private readonly ensureReady: () => Promise<void>,
-	) {
-		this.lastSyncedName = pi.getSessionName();
-	}
-
-	handle(name: string | undefined): Promise<void> {
-		this.queue = this.queue
-			.then(async () => {
-				if (this.rollbackEventName !== undefined && name === this.rollbackEventName) {
-					this.rollbackEventName = undefined;
-					return;
-				}
-				if (name === this.lastSyncedName) return;
-				const previousSessionName = this.lastSyncedName;
-				if (!name || !/^[a-z][a-z0-9_-]{0,31}$/.test(name)) {
-					const restoreCurrentChange = previousSessionName && this.pi.getSessionName() === name;
-					if (restoreCurrentChange) {
-						this.rollbackEventName = previousSessionName;
-						this.pi.setSessionName(previousSessionName);
-					}
-					this.notify(
-						`Agent name must match [a-z][a-z0-9_-]{0,31}; ${restoreCurrentChange ? "the previous name was restored" : "a newer name change remains pending"}.`,
-						"error",
-					);
-					return;
-				}
-				await this.ensureReady();
-
-				const [currentResult, agentsResult] = await Promise.all([
-					this.client.requestRead("pane.current", {
-						caller_pane_id: this.callerPaneId,
-					}),
-					this.client.requestRead("agent.list", {}),
-				]);
-				if (agentsResult.agents.some((agent) => agent.pane_id !== this.callerPaneId && agent.name === name)) {
-					const restoreCurrentChange = previousSessionName && this.pi.getSessionName() === name;
-					if (restoreCurrentChange) {
-						this.rollbackEventName = previousSessionName;
-						this.pi.setSessionName(previousSessionName);
-					}
-					this.notify(
-						`Agent name ${name} is already in use; ${restoreCurrentChange ? "the previous name was restored" : "a newer name change remains pending"}.`,
-						"error",
-					);
-					return;
-				}
-				const [agentResult, tabResult] = await Promise.all([
-					this.client.requestRead("agent.get", {
-						target: this.callerPaneId,
-					}),
-					this.client.requestRead("tab.get", {
-						tab_id: currentResult.pane.tab_id,
-					}),
-				]);
-				let renameFailure: unknown;
-				try {
-					await this.client.requestMutation("agent.rename", { target: this.callerPaneId, name });
-					await this.client.requestMutation("tab.rename", { tab_id: currentResult.pane.tab_id, label: name });
-					this.lastSyncedName = name;
-					return;
-				} catch (error) {
-					renameFailure = error;
-				}
-
-				const rollbackFailures: string[] = [];
-				try {
-					await this.client.requestMutation("tab.rename", {
-						tab_id: currentResult.pane.tab_id,
-						label: tabResult.tab.label,
-					});
-				} catch (error) {
-					rollbackFailures.push(`tab: ${error instanceof Error ? error.message : String(error)}`);
-				}
-				try {
-					await this.client.requestMutation("agent.rename", {
-						target: this.callerPaneId,
-						name: agentResult.agent.name ?? null,
-					});
-				} catch (error) {
-					rollbackFailures.push(`agent: ${error instanceof Error ? error.message : String(error)}`);
-				}
-				if (previousSessionName && this.pi.getSessionName() === name) {
-					this.rollbackEventName = previousSessionName;
-					this.pi.setSessionName(previousSessionName);
-				}
-				this.notify(
-					`Could not synchronize Agent name ${name}: ${renameFailure instanceof Error ? renameFailure.message : String(renameFailure)}${rollbackFailures.length ? `; rollback failed for ${rollbackFailures.join(", ")}` : ""}`,
-					"error",
-				);
-			})
-			.catch((error) => {
-				const previousSessionName = this.lastSyncedName;
-				if (previousSessionName && this.pi.getSessionName() === name) {
-					this.rollbackEventName = previousSessionName;
-					this.pi.setSessionName(previousSessionName);
-				}
-				this.notify(
-					`Agent name synchronization failed: ${error instanceof Error ? error.message : String(error)}`,
-					"error",
-				);
-			});
-		return this.queue;
 	}
 }

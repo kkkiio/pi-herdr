@@ -6,7 +6,7 @@ pi-herdr 是一个 [Pi](https://github.com/earendil-works/pi) 扩展，让你在
 
 ## Installation
 
-需要 Herdr 0.7.5、Pi 0.83 或更高版本，以及 Node.js 22.19 或更高版本。
+需要 Herdr 0.7.5 或更高版本、Pi 0.83 或更高版本，以及 Node.js 22.19 或更高版本。
 
 ```bash
 pi install npm:@kkkiio/pi-herdr
@@ -48,9 +48,8 @@ pi-herdr 只封装后台 Agent 工作流需要的 Herdr 能力，不替代 Herdr
 
 | Pi 能力                         | Herdr RPC                                                     | 用户可见行为                                                   |
 | ------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------- |
-| `Agent`                         | `tab.create` / `worktree.create`, `agent.start`, `agent.prompt` | 在独立 tab 中启动持久 Agent，可选择共享目录或独立 Git worktree |
+| `Agent`                         | `tab.create` / `worktree.create`, `tab.rename`, `agent.start`, `agent.prompt` | 在独立 tab 中启动持久 Agent，可选择共享目录或独立 Git worktree |
 | `ListAgents`, `SendMessage`     | `agent.list`, `agent.get`, `agent.prompt`                     | 发现并联系 live Agent 或 Pi peer；不提供离线消息队列           |
-| `/name`                         | `agent.rename`, `tab.rename`                                | 同步 Agent 名称；停止 Agent 直接用 Herdr 关闭 pane/tab          |
 | 其他 Herdr 管理能力             | 其余 `workspace.*`、`tab.*`、`pane.*`、`worktree.*`、`layout.*` | 不由 pi-herdr 封装，直接使用 Herdr                              |
 
 协议兼容性和连接行为见 [Herdr RPC integration](docs/herdr-rpc.md)。
