@@ -15,14 +15,21 @@ export interface ModelNote {
  */
 export const MODEL_NOTES: Record<string, ModelNote> = {
 	"deepseek-v4-flash": {
-		capacity: "fast, but usually cannot solve hard problems",
+		capacity: "small model. fast, but often reaches wrong conclusions too quickly",
 		soundness: "verify its conclusions before acting on them",
 	},
+	"gpt-5.6-luna": {
+		capacity: "small model. extremely cheap even at max thinking; good for parallel fan-out of simple tasks, but slow",
+	},
+	"gpt-5.6-terra": {
+		capacity: "medium model. capable and rigorous, but slow and may not solve hard problems",
+	},
 	"kimi-3": {
-		capacity: "strong at frontend and visual tasks, but slow",
+		capacity: "big model. very smart and strong at frontend and visual tasks, but slow",
 	},
 	"gpt-5.6-sol": {
-		capacity: "rigorous, but tends to add self-justifying docs and tests that pollute project context",
+		capacity:
+			"big model. very smart and rigorous, but expensive and tends to add self-justifying docs and tests that pollute project context",
 	},
 };
 
