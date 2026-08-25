@@ -11,7 +11,11 @@ import { PiHerdrWorld, primaryAgent, spawnedAgent, type RequestHandler } from ".
 
 type LifecycleMode = "shared-held" | "worktree-success" | "worktree-failure";
 
-async function installLifecycle(thisWorld: PiHerdrWorld, mode: LifecycleMode): Promise<void> {
+async function installLifecycle(
+	thisWorld: PiHerdrWorld,
+	mode: LifecycleMode,
+	serverOptions: { protocol?: number; version?: string } = {},
+): Promise<void> {
 	let promptSocket: import("node:net").Socket | undefined;
 	let promptRequest: import("../support/world.js").RecordedRequest | undefined;
 	let promptAccepted = false;
@@ -103,6 +107,7 @@ async function installLifecycle(thisWorld: PiHerdrWorld, mode: LifecycleMode): P
 	};
 	await thisWorld.prepareServer(handler, {
 		liveAgents: () => (promptAccepted || promptRejected ? [primaryAgent, ready] : [primaryAgent]),
+		...serverOptions,
 	});
 	const client = thisWorld.createClient();
 	const sandbox = await thisWorld.prepareSandbox();
@@ -127,6 +132,10 @@ async function installLifecycle(thisWorld: PiHerdrWorld, mode: LifecycleMode): P
 
 Given("a protocol 17 Herdr that holds the shared Agent initial prompt", async function (this: PiHerdrWorld) {
 	await installLifecycle(this, "shared-held");
+});
+
+Given("a newer Herdr that holds the shared Agent initial prompt", async function (this: PiHerdrWorld) {
+	await installLifecycle(this, "shared-held", { protocol: 20, version: "0.8.2" });
 });
 
 Given("a protocol 17 Herdr that accepts a worktree Agent launch", async function (this: PiHerdrWorld) {

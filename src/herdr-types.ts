@@ -309,10 +309,6 @@ export interface AgentTargetParams {
 	target: string;
 }
 
-export interface AgentRenameParams extends AgentTargetParams {
-	name?: string | null;
-}
-
 export interface PaneCurrentParams {
 	caller_pane_id?: string | null;
 }
@@ -336,7 +332,6 @@ export type HerdrMutationMethod =
 	| "worktree.remove"
 	| "agent.start"
 	| "agent.prompt"
-	| "agent.rename"
 	| "pane.close";
 
 export interface HerdrMethodParams {
@@ -354,7 +349,6 @@ export interface HerdrMethodParams {
 	"worktree.remove": WorktreeRemoveParams;
 	"agent.start": AgentStartParams;
 	"agent.prompt": AgentPromptParams;
-	"agent.rename": AgentRenameParams;
 	"pane.close": PaneTargetParams;
 }
 
@@ -373,7 +367,6 @@ export interface HerdrMethodResults {
 	"worktree.remove": WorktreeRemovedResult;
 	"agent.start": AgentStartedResult;
 	"agent.prompt": AgentPromptedResult;
-	"agent.rename": AgentInfoResult;
 	"pane.close": OkResult;
 }
 

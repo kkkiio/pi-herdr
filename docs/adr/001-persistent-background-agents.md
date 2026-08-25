@@ -40,7 +40,7 @@ pi-herdr 不保存 offline Agent registry。pane、tab 或进程消失后：
 
 ### 5. Supervisor 只维护进程内事实
 
-每个会话以 pane ID 为键记录自己成功创建且仍 live 的 Agent。记录用于 `type` / `createdBy` 注解、rename 关联和失败回滚，不写入磁盘，也不在会话之间共享。
+每个会话以 pane ID 为键记录自己成功创建且仍 live 的 Agent。记录用于 `type` / `createdBy` 注解、lifecycle reconciliation 和失败回滚，不写入磁盘，也不在会话之间共享。
 
 Socket 重连只通过 live snapshot 删除失效记录、刷新仍存在的 runtime，不从 session 文件重建 ownership。Snapshot 与 `agent.list` reconciliation 只能处理各自读取开始前已经存在的 ownership key，延迟响应不能删除并发创建成功的新记录。
 

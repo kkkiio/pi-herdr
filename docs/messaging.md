@@ -81,7 +81,7 @@ SendMessage({
 - 不读取目标 session 最后一条 assistant 消息来推断结果。
 - 不自动恢复已经关闭的 Agent。
 - socket 断线时只自动重试 `ping`、`session.snapshot`、`agent.list`、`agent.get` 等幂等读取。
-- `agent.prompt`、`agent.start`、rename、close 等 mutating RPC 不自动重放，避免重复提交或重复操作。
+- `agent.prompt`、`agent.start`、tab/worktree 与 close 等 mutating RPC 不自动重放，避免重复提交或重复操作。
 
 消息不会提升接收方权限，也不能代替用户批准。所有会话拥有相同的 pi-herdr 工具表面。
 

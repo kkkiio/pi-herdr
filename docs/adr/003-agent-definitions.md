@@ -55,7 +55,7 @@ Frontmatter 是封闭 schema，表格之外的字段全部报错。Agent 始终�
 
 ### 5. One extension, uniform surface
 
-所有运行在 Herdr 中的 Pi 会话加载同一个 pi-herdr extension 并获得相同的控制表面：`Agent`、`ListAgents`、`SendMessage`、`/agents` 与 name 同步。创建 Agent 时不再注入角色标记；被创建的 Agent 与创建者能力相同，可以继续创建别的 Agent。
+所有运行在 Herdr 中的 Pi 会话加载同一个 pi-herdr extension 并获得相同的控制表面：`Agent`、`ListAgents`、`SendMessage` 与 `/agents`。创建 Agent 时不再注入角色标记；被创建的 Agent 与创建者能力相同，可以继续创建别的 Agent。
 
 递归创建不做限制：实践中 Agent 没有主动递归创建的倾向，Herdr 平台自身也不限制 pane/agent 创建，适配层不替平台防这种事。普通 extension/skill 发现不改变 pi-herdr 自己的工具表面。
 
@@ -85,7 +85,7 @@ Explorer 使用 `tools: [read, bash, grep, find, ls]`、`extensions: false`、`s
 
 ### Positive
 
-- 单入口确保消息、identity 和 rename 行为一致。
+- 单入口确保消息、identity 和工具行为一致。
 - Definition schema 小且严格，可直接映射 Pi 原生启动参数。
 - 调用方可以从任意任务相关仓库显式选择项目角色，没有隐式 root 覆盖。
 - 用户级与 bundled catalog 保留开箱即用体验，新 Pi 的 cwd 继续使用原生 project trust。
