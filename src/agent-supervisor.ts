@@ -430,7 +430,7 @@ export class AgentSupervisor {
 	}
 
 	private reconcile(snapshot: SessionSnapshot, ownedBeforeRead: ReadonlySet<string>): void {
-		if (snapshot.protocol < MIN_HERDR_PROTOCOL) {
+		if (!Number.isFinite(snapshot.protocol) || snapshot.protocol < MIN_HERDR_PROTOCOL) {
 			this.initialized = false;
 			this.protocolVerified = false;
 			this.protocolError = new Error(
@@ -487,7 +487,7 @@ export class AgentSupervisor {
 		if (this.protocolError) throw this.protocolError;
 		if (this.protocolVerified) return;
 		const result = await this.client.requestRead("ping", {}, signal);
-		if (result.protocol < MIN_HERDR_PROTOCOL) {
+		if (!Number.isFinite(result.protocol) || result.protocol < MIN_HERDR_PROTOCOL) {
 			this.protocolError = new Error(
 				`pi-herdr requires Herdr socket protocol ${MIN_HERDR_PROTOCOL} or newer (Herdr 0.7.5+), but the connected server reports ${result.protocol} (${result.version}).`,
 			);

@@ -35,6 +35,9 @@ export default function piHerdrExtension(pi: ExtensionAPI): void {
 
 		controlPlaneRegistered = true;
 		let connectionState: HerdrConnectionState = "connecting";
+		// Bumped on every event-stream failure so a stale readiness callback
+		// from a dead socket cannot mark the replacement stream connected.
+		let streamEpoch = 0;
 		const setConnectionState = (state: HerdrConnectionState): void => {
 			connectionState = state;
 			const theme = ctx.ui.theme;
@@ -51,6 +54,7 @@ export default function piHerdrExtension(pi: ExtensionAPI): void {
 		setConnectionState("connecting");
 		const client = new HerdrClient(socketPath, {
 			onEventError: (error) => {
+				streamEpoch += 1;
 				if (connectionState === "reconnecting" || connectionState === "down") return;
 				setConnectionState("reconnecting");
 				ctx.ui.notify(
@@ -59,10 +63,14 @@ export default function piHerdrExtension(pi: ExtensionAPI): void {
 				);
 			},
 			onEventReady: async (reconnected) => {
+				const epoch = streamEpoch;
 				if (supervisor) {
 					await supervisor.initialize();
 					if (reconnected) await supervisor.refresh();
 				}
+				// The socket behind this readiness failed while initializing;
+				// the reconnect path owns the state now.
+				if (epoch !== streamEpoch) return;
 				if (connectionState === "reconnecting" || connectionState === "down") {
 					ctx.ui.notify("pi-herdr reconnected to the Herdr event stream.", "info");
 				}
