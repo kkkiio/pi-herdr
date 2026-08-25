@@ -190,10 +190,6 @@ Then("each prompt prefers the target name and preserves a verbatim reply envelop
 Given("a protocol 17 Herdr with one readable target", async function (this: PiHerdrWorld) {
 	const target: AgentInfo = { ...spawnedAgent, name: "worker", agent_status: "working" };
 	const handler: RequestHandler = (request, socket, server) => {
-		if (request.method === "agent.get") {
-			server.reply(socket, request, { type: "agent_info", agent: target });
-			return;
-		}
 		if (request.method === "agent.read") {
 			server.reply(socket, request, {
 				type: "pane_read",
@@ -226,10 +222,9 @@ Then("Herdr receives an agent.read with the requested source and rows", function
 	assert.deepEqual(reads[0]?.params, { target: "worker", source: "recent_unwrapped", lines: 120 });
 });
 
-Then("the read result carries the screen text and the target status", function (this: PiHerdrWorld) {
-	const result = this.state.get("read") as Awaited<ReturnType<AgentSupervisor["readScreen"]>>;
-	assert.equal(result.read.text, "rendered screen <text>");
-	assert.equal(result.read.source, "recent_unwrapped");
-	assert.equal(result.agent.name, "worker");
-	assert.equal(result.agent.agent_status, "working");
+Then("the read result carries the screen text", function (this: PiHerdrWorld) {
+	const read = this.state.get("read") as Awaited<ReturnType<AgentSupervisor["readScreen"]>>;
+	assert.equal(read.text, "rendered screen <text>");
+	assert.equal(read.source, "recent_unwrapped");
+	assert.equal(read.pane_id, spawnedAgent.pane_id);
 });

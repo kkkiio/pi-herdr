@@ -85,7 +85,7 @@ export function registerAgentTools(
 		name: "ReadAgent",
 		label: "Read Agent",
 		description:
-			"Read a live Agent's terminal screen text through Herdr agent.read. Passive observation: returns rendered text without changing the Agent or marking anything seen. Use it to inspect what a background Agent is currently showing before deciding whether to wait for it or message it.",
+			"Read a live Agent's terminal screen text through Herdr agent.read. The text is the Agent's own TUI, including its input queue, approval prompts, and working indicator. Passive observation: does not change the Agent or mark anything seen. Use it to inspect what a background Agent is currently showing before deciding whether to wait for it or message it.",
 		promptSnippet: "Read a live Agent's current terminal text.",
 		promptGuidelines: [
 			"Use ReadAgent to inspect a live Agent's screen instead of messaging it to ask what it is doing.",
