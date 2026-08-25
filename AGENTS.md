@@ -18,7 +18,7 @@ pi-herdr 是 TypeScript ESM Pi extension。
 │   └── workflows/ci.yml                   # main push/PR 全量回归 CI
 ├── docs/
 │   ├── agent-contract.md                  # 创建、统一工具表面、name、持久性与生命周期
-│   ├── messaging.md                       # ListAgents、SendMessage 与 reply
+│   ├── messaging.md                       # ListAgents、ReadAgent、SendMessage 与 reply
 │   ├── agent-definitions.md               # Markdown frontmatter 用户参考
 │   ├── herdr-rpc.md                       # Socket protocol、事件、重试与 RPC 边界
 │   └── adr/                               # Accepted 设计决策；修改 lifecycle/messaging/transport/naming 行为前先读对应 ADR
@@ -34,7 +34,7 @@ pi-herdr 是 TypeScript ESM Pi extension。
 │   ├── agent-supervisor.ts                # Live ownership、创建事务与工具语义
 │   ├── herdr-client.ts                    # 独立 RPC socket、event stream 与只读重试
 │   ├── herdr-types.ts                     # Herdr protocol 17 wire types
-│   ├── tools.ts                           # 四个 Pi tool 的 schema 与注册
+│   ├── tools.ts                           # 五个 Pi tool 的 schema 与注册
 │   └── ui.ts                              # `/agents` live runtime UI
 ├── test/
 │   ├── bdd/                               # Cucumber 全量回归 features/steps/support；@herdr-e2e 为真机场景

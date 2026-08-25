@@ -215,6 +215,24 @@ export interface AgentListResult {
 	agents: AgentInfo[];
 }
 
+export const AGENT_READ_SOURCES = ["visible", "recent", "recent_unwrapped", "detection"] as const;
+
+export type AgentReadSource = (typeof AGENT_READ_SOURCES)[number];
+
+export interface AgentReadResult {
+	type: "pane_read";
+	read: {
+		pane_id: string;
+		workspace_id: string;
+		tab_id: string;
+		source: AgentReadSource;
+		format: "text" | "ansi";
+		text: string;
+		revision: number;
+		truncated: boolean;
+	};
+}
+
 export interface PaneInfoResult {
 	type: "pane_info";
 	pane: PaneInfo;
@@ -244,6 +262,7 @@ export type HerdrResult =
 	| AgentStartedResult
 	| AgentPromptedResult
 	| AgentListResult
+	| AgentReadResult
 	| PaneInfoResult
 	| PaneCurrentResult
 	| SubscriptionStartedResult
@@ -309,6 +328,13 @@ export interface AgentTargetParams {
 	target: string;
 }
 
+export interface AgentReadParams extends AgentTargetParams {
+	source: AgentReadSource;
+	format?: "text" | "ansi";
+	lines?: number | null;
+	strip_ansi?: boolean;
+}
+
 export interface PaneCurrentParams {
 	caller_pane_id?: string | null;
 }
@@ -322,7 +348,7 @@ export interface TabTargetParams {
 }
 
 export type HerdrReadMethod =
-	"ping" | "session.snapshot" | "agent.list" | "agent.get" | "pane.current" | "pane.get" | "tab.get";
+	"ping" | "session.snapshot" | "agent.list" | "agent.get" | "agent.read" | "pane.current" | "pane.get" | "tab.get";
 
 export type HerdrMutationMethod =
 	| "tab.create"
@@ -339,6 +365,7 @@ export interface HerdrMethodParams {
 	"session.snapshot": Record<string, never>;
 	"agent.list": Record<string, never>;
 	"agent.get": AgentTargetParams;
+	"agent.read": AgentReadParams;
 	"pane.current": PaneCurrentParams;
 	"pane.get": PaneTargetParams;
 	"tab.get": TabTargetParams;
@@ -357,6 +384,7 @@ export interface HerdrMethodResults {
 	"session.snapshot": SessionSnapshotResult;
 	"agent.list": AgentListResult;
 	"agent.get": AgentInfoResult;
+	"agent.read": AgentReadResult;
 	"pane.current": PaneCurrentResult;
 	"pane.get": PaneInfoResult;
 	"tab.get": TabInfoResult;

@@ -186,3 +186,50 @@ Then("each prompt prefers the target name and preserves a verbatim reply envelop
 	);
 	assert.equal(prompts[1]?.params.text, `${opening}\nPane-addressed follow-up.`);
 });
+
+Given("a protocol 17 Herdr with one readable target", async function (this: PiHerdrWorld) {
+	const target: AgentInfo = { ...spawnedAgent, name: "worker", agent_status: "working" };
+	const handler: RequestHandler = (request, socket, server) => {
+		if (request.method === "agent.get") {
+			server.reply(socket, request, { type: "agent_info", agent: target });
+			return;
+		}
+		if (request.method === "agent.read") {
+			server.reply(socket, request, {
+				type: "pane_read",
+				read: {
+					pane_id: target.pane_id,
+					workspace_id: target.workspace_id,
+					tab_id: target.tab_id,
+					source: request.params.source,
+					format: "text",
+					text: "rendered screen <text>",
+					revision: 0,
+					truncated: false,
+				},
+			});
+			return;
+		}
+		server.reject(socket, request, "unsupported", `Unexpected BDD method ${request.method}`);
+	};
+	await installSupervisor(this, handler, () => [primaryAgent, target]);
+});
+
+When("the Primary reads the target screen with an explicit source and row limit", async function (this: PiHerdrWorld) {
+	const supervisor = this.state.get("supervisor") as AgentSupervisor;
+	this.state.set("read", await supervisor.readScreen("worker", { source: "recent_unwrapped", lines: 120 }));
+});
+
+Then("Herdr receives an agent.read with the requested source and rows", function (this: PiHerdrWorld) {
+	const reads = (this.server?.requests ?? []).filter((request) => request.method === "agent.read");
+	assert.equal(reads.length, 1);
+	assert.deepEqual(reads[0]?.params, { target: "worker", source: "recent_unwrapped", lines: 120 });
+});
+
+Then("the read result carries the screen text and the target status", function (this: PiHerdrWorld) {
+	const result = this.state.get("read") as Awaited<ReturnType<AgentSupervisor["readScreen"]>>;
+	assert.equal(result.read.text, "rendered screen <text>");
+	assert.equal(result.read.source, "recent_unwrapped");
+	assert.equal(result.agent.name, "worker");
+	assert.equal(result.agent.agent_status, "working");
+});

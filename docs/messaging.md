@@ -25,6 +25,22 @@ ListAgents() => {
 
 ListAgents 不读取 pi session 文件，不返回已经关闭的 runtime，也不维护 offline registry。
 
+## ReadAgent
+
+`ReadAgent` 通过 herdr `agent.read` 被动读取一个 live Agent 的终端文本，用于在决定等待或发消息之前观察后台 Agent 当前显示的内容：
+
+```typescript
+ReadAgent({
+  agent: string,                    // live Agent name 或 pane ID
+  source?: "visible" | "recent" | "recent_unwrapped" | "detection",  // 默认 "recent"
+  lines?: number,                   // recent 类 source 的尾部行数，默认 80
+}) => { agent: AgentInfo, read: { text, source, truncated, ... } }
+```
+
+- 读取是被动的：不改变 Agent 状态，也不把 `done` 标记为已读。
+- Agent 正在工作或 blocked 时，需要翻页的 `recent` 读取可能返回 `agent_not_idle`；改用 `source: "visible"` 或等 idle 后重试。
+- `detection` 返回 herdr 用于状态分类的快照，适合排查状态识别问题。
+
 ## SendMessage
 
 ```typescript
