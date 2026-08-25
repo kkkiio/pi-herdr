@@ -4,7 +4,7 @@ Feature: Control surface and Agent definitions
   Scenario: The extension registers one uniform control tool surface
     Given a Pi tool registration recorder
     When pi-herdr registers its control tools
-    Then the surface has Agent, ListAgents, and SendMessage
+    Then the surface has Agent, ListAgents, ReadAgent, and SendMessage
 
   Scenario: Outside Herdr the extension is silent
     Given HERDR_ENV is not 1
@@ -14,7 +14,7 @@ Feature: Control surface and Agent definitions
   Scenario: Real Pi RPC loads the extension surface inside Herdr
     Given a fake protocol 17 Herdr for real Pi RPC sessions
     When a real Pi RPC session starts inside Herdr
-    Then the RPC session exposes exactly three pi-herdr tools and the agents command
+    Then the RPC session exposes exactly four pi-herdr tools and the agents command
 
   Scenario: A malformed global definition never falls through to bundled catalog entries
     Given a malformed global definition shadows a valid bundled definition

@@ -7,7 +7,8 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { AgentDefinitionStore, type ResolvedAgentDefinition } from "./agent-definitions.js";
 import { AgentRuntime, type AgentOverrides } from "./agent-runtime.js";
 import { HerdrClient, HerdrRpcError } from "./herdr-client.js";
-import type { AgentInfo, HerdrEvent, SessionSnapshot } from "./herdr-types.js";
+import type { AgentInfo, AgentReadResult, AgentReadSource, HerdrEvent, SessionSnapshot } from "./herdr-types.js";
+import { AGENT_READ_SOURCES } from "./herdr-types.js";
 
 export interface LaunchAgentRequest extends AgentOverrides {
 	description: string;
@@ -398,6 +399,30 @@ export class AgentSupervisor {
 				};
 			}),
 		};
+	}
+
+	async readScreen(
+		target: string,
+		options: { source?: AgentReadSource; lines?: number } = {},
+		signal?: AbortSignal,
+	): Promise<{ agent: AgentInfo; read: AgentReadResult["read"] }> {
+		if (typeof target !== "string" || !target.trim()) {
+			throw new Error("agent must contain visible text.");
+		}
+		const source = options.source ?? "recent";
+		if (!AGENT_READ_SOURCES.includes(source)) {
+			throw new Error(`source must be one of ${AGENT_READ_SOURCES.join(", ")}.`);
+		}
+		if (options.lines !== undefined && (!Number.isInteger(options.lines) || options.lines < 1)) {
+			throw new Error("lines must be a positive integer.");
+		}
+		await this.initialize();
+		if (signal?.aborted) throw new Error("Agent read was cancelled before it started.");
+		const [targetResult, readResult] = await Promise.all([
+			this.client.requestRead("agent.get", { target }, signal),
+			this.client.requestRead("agent.read", { target, source, lines: options.lines ?? null }, signal),
+		]);
+		return { agent: targetResult.agent, read: readResult.read };
 	}
 
 	async send(
