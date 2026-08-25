@@ -51,7 +51,7 @@ export const MODEL_NOTES: Record<string, ModelNote> = {
 	"gpt-5.6-sol": {
 		size: "big",
 		price: "expensive",
-		speed: "unknown",
+		speed: "slow",
 		traits: "very smart and rigorous; tends to add self-justifying docs and tests that pollute project context",
 	},
 };
