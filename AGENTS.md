@@ -29,7 +29,7 @@ pi-herdr 是 TypeScript ESM Pi extension。
 │   ├── agent-supervisor.ts                # Live ownership、创建事务与工具语义
 │   ├── herdr-client.ts                    # 独立 RPC socket、event stream 与只读重试
 │   ├── herdr-types.ts                     # Herdr protocol 17 wire types
-│   ├── tools.ts                           # 五个 Pi tool 的 schema 与注册
+│   ├── tools.ts                           # 四个 Pi tool 的 schema 与注册
 │   └── ui.ts                              # `/agents` live runtime UI
 ├── test/
 │   ├── bdd/                               # Cucumber 全量回归 features/steps/support；@herdr-e2e 为真机场景

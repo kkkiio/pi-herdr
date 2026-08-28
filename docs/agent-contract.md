@@ -76,7 +76,7 @@ Agent({
 5. `agent.prompt` 投递带 `<from ...>` envelope 的初始请求。
 6. 只有 prompt 被 Herdr 接受后才记录 ownership，并返回 `launched`。
 
-Worktree 隔离用传入同一 cwd 的 `worktree.create` 替换第 2 步，直接复用返回的 workspace、tab 与 root pane，再显式调用 `tab.rename` 设置初始 Agent tab label；不会额外创建第二个 tab。Definition 文件位置不参与 workspace 或 worktree 选择。
+Worktree 隔离用传入同一 cwd 的 `worktree.create` 替换第 2 步，直接复用返回的 workspace、tab 与 root pane，再显式调用 `tab.rename` 设置初始 Agent tab label；不会额外创建第二个 tab。
 
 raw `agent.start` 成功只表示 launch 已提交，不表示 Pi 已经可以接收 prompt；`Agent` 返回 `launched` 也只表示初始 prompt 被接受，不等待 Agent 完成本轮工作。
 
