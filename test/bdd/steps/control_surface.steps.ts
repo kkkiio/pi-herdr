@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 import piHerdrExtension from "../../../src/index.js";
-import { AgentDefinitionStore, type ResolvedAgentDefinition } from "../../../src/agent-definitions.js";
 import { AgentRuntime } from "../../../src/agent-runtime.js";
 import { availableModelNotes } from "../../../src/model-notes.js";
 import type { AgentSupervisor } from "../../../src/agent-supervisor.js";
@@ -116,47 +113,7 @@ Then("the RPC session exposes exactly four pi-herdr tools and the agents command
 	assert.ok(observation.rpcCommands.some((command) => command.name === "agents" && command.source === "extension"));
 });
 
-Given("a malformed global definition shadows a valid bundled definition", async function (this: PiHerdrWorld) {
-	const sandbox = await this.prepareSandbox();
-	const root = join(sandbox, "project");
-	const globalDir = join(sandbox, "global");
-	const bundledDir = join(sandbox, "package", "agents");
-	await Promise.all([
-		mkdir(root, { recursive: true }),
-		mkdir(globalDir, { recursive: true }),
-		mkdir(bundledDir, { recursive: true }),
-	]);
-	await Promise.all([
-		writeFile(
-			join(globalDir, "reviewer.md"),
-			"---\ndescription: selected\nlegacy_worktree: true\n---\ninvalid",
-			"utf8",
-		),
-		writeFile(join(bundledDir, "reviewer.md"), "---\ndescription: bundled\n---\nvalid", "utf8"),
-	]);
-	this.state.set("definitionStore", new AgentDefinitionStore({ globalDir, bundledDir }));
-	this.state.set("definitionCwd", root);
-});
-
-When("the selected definition is loaded", async function (this: PiHerdrWorld) {
-	const store = this.state.get("definitionStore") as AgentDefinitionStore;
-	try {
-		await store.load("reviewer", String(this.state.get("definitionCwd")));
-		assert.fail("Expected the selected global definition to fail strict validation.");
-	} catch (error) {
-		this.state.set("definitionError", error);
-	}
-});
-
-Then("definition loading reports the global schema error", function (this: PiHerdrWorld) {
-	const error = this.state.get("definitionError");
-	assert.ok(error instanceof Error);
-	assert.match(error.message, /global.*reviewer\.md|reviewer\.md/);
-	assert.match(error.message, /unknown field "legacy_worktree"/);
-	assert.doesNotMatch(error.message, /bundled/);
-});
-
-Given("selected definitions and authenticated Primary models", function (this: PiHerdrWorld) {
+Given("authenticated Primary models", function (this: PiHerdrWorld) {
 	const primary = { provider: "acme", id: "primary-model" };
 	const matched = { provider: "acme", id: "gpt-5-mini" };
 	const context = {
@@ -164,43 +121,33 @@ Given("selected definitions and authenticated Primary models", function (this: P
 		modelRegistry: { getAvailable: () => [primary, matched] },
 		scopedModels: [],
 	} as unknown as ExtensionContext;
-	const definition: ResolvedAgentDefinition = {
-		name: "worker",
-		source: "path",
-		path: "/project/.pi/agents/worker.md",
-		prompt: "Implement the request.",
-		model: ["acme/not-authenticated", "ACME/gpt.5.mini"],
-	};
 	this.state.set("modelContext", context);
-	this.state.set("customDefinition", definition);
 });
 
-When("launch plans are resolved from selected definition preferences", function (this: PiHerdrWorld) {
+When("launch plans are resolved from explicit model preferences", function (this: PiHerdrWorld) {
 	const runtime = new AgentRuntime("/package/dist/index.js");
 	const context = this.state.get("modelContext") as ExtensionContext;
-	const definition = this.state.get("customDefinition") as ResolvedAgentDefinition;
-	const unavailableDefinition: ResolvedAgentDefinition = {
-		...definition,
-		model: ["acme/not-authenticated"],
-	};
-	this.state.set("matchingPlan", runtime.resolveLaunchPlan(definition, {}, context));
-	this.state.set("fallbackPlan", runtime.resolveLaunchPlan(unavailableDefinition, {}, context));
+	this.state.set(
+		"matchingPlan",
+		runtime.resolveLaunchPlan({ model: ["acme/not-authenticated", "ACME/gpt.5.mini"] }, context),
+	);
+	this.state.set("fallbackPlan", runtime.resolveLaunchPlan({}, context));
 	try {
-		runtime.resolveLaunchPlan(definition, { model: "acme/not-authenticated" }, context);
+		runtime.resolveLaunchPlan({ model: "acme/not-authenticated" }, context);
 		assert.fail("Expected an unavailable explicit model override to fail.");
 	} catch (error) {
 		this.state.set("explicitModelError", error);
 	}
 });
 
-Then("the first matching normalized definition model is selected", function (this: PiHerdrWorld) {
+Then("the first matching normalized override model is selected", function (this: PiHerdrWorld) {
 	const plan = this.state.get("matchingPlan") as ReturnType<AgentRuntime["resolveLaunchPlan"]>;
 	assert.equal(plan.model, "acme/gpt-5-mini");
 	const modelIndex = plan.args.indexOf("--model");
 	assert.equal(plan.args[modelIndex + 1], "acme/gpt-5-mini");
 });
 
-Then("unavailable definition models inherit the Primary model", function (this: PiHerdrWorld) {
+Then("a missing model override inherits the Primary model", function (this: PiHerdrWorld) {
 	const plan = this.state.get("fallbackPlan") as ReturnType<AgentRuntime["resolveLaunchPlan"]>;
 	assert.equal(plan.model, "acme/primary-model");
 });
@@ -209,24 +156,6 @@ Then("an unavailable explicit model override is rejected", function (this: PiHer
 	const error = this.state.get("explicitModelError");
 	assert.ok(error instanceof Error);
 	assert.match(error.message, /override did not match an authenticated, enabled model/);
-});
-
-When("a launch plan is resolved for a definition at a deep multi-byte path", function (this: PiHerdrWorld) {
-	const runtime = new AgentRuntime("/package/dist/index.js");
-	const context = this.state.get("modelContext") as ExtensionContext;
-	const definition = this.state.get("customDefinition") as ResolvedAgentDefinition;
-	const deepPath = `/project/${"深目录/".repeat(80)}${"agents/".repeat(60)}worker.md`;
-	try {
-		runtime.resolveLaunchPlan({ ...definition, path: deepPath }, {}, context);
-	} catch (error) {
-		this.state.set("oversizedPlanError", error);
-	}
-});
-
-Then("the launch plan rejects the oversized argv with a tty budget error", function (this: PiHerdrWorld) {
-	const error = this.state.get("oversizedPlanError");
-	assert.ok(error instanceof Error, "oversized argv error must be recorded");
-	assert.ok(String(error.message).includes("tty safety budget"), String(error));
 });
 
 When("model awareness notes are computed for available model ids {string}", function (this: PiHerdrWorld, ids: string) {

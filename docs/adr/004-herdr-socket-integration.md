@@ -23,7 +23,7 @@ Protocol 检查是下界而不是精确匹配：接受 protocol ≥ 17 的 serve
 
 共享 workspace 时把 `Agent({ cwd })` 解析出的工作目录和 Agent name 传给 `tab.create`，直接在返回的 root pane 中执行 `agent.start`；未提供 cwd 时继承调用方调用时的 cwd。Worktree 隔离时把同一 cwd 传给 `worktree.create`，直接复用其返回的 workspace、tab 和 root pane，不再额外调用 `tab.create`，随后显式调用 `tab.rename` 把返回 tab 的初始 label 设为 Agent name。Definition 文件位置不参与 cwd 或 worktree 选择。
 
-`worktree.create` 没有 env 参数。`agent.start` 通过 `args` 启动全新、正常落盘的 Pi session，显式加载同一个 pi-herdr extension；所有会话获得相同工具表面，不传角色标记。definition 的模型、thinking、工具和资源映射到 Pi args。pi-herdr 不传 `--approve` 或 `--no-approve`；新 Pi 针对实际 cwd 正常执行原生 project trust。Agent name 是 Herdr live route，并用于初始化 tab label；Pi session name 由 Pi 独立管理。
+`worktree.create` 没有 env 参数。`agent.start` 通过 `args` 启动全新、正常落盘的 Pi session，显式加载同一个 pi-herdr extension；所有会话获得相同工具表面，不传角色标记。显式模型与 thinking 覆盖映射到 Pi args。pi-herdr 不传 `--approve` 或 `--no-approve`；新 Pi 针对实际 cwd 正常执行原生 project trust。Agent name 是 Herdr live route，并用于初始化 tab label；Pi session name 由 Pi 独立管理。
 
 raw `agent.start` 返回成功时 Agent 可能仍有 `launch_pending: true`。运行时使用可重试的只读 `agent.get` 轮询，直到 `launch_pending: false` 且 `interactive_ready: true`，之后才提交初始 `agent.prompt`。只有 prompt 成功后 `Agent` 才返回 `launched`。
 

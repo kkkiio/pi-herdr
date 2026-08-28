@@ -26,7 +26,7 @@ Agent 会在单独的 tab 中工作。使用 `/agents` 可以查看当前 live �
 让刚才的 explorer Agent 再检查刷新令牌的错误处理，并回复新增发现。
 ```
 
-内置 `explorer` 适合只读搜索与代码定位；省略 definition 时新 Agent 使用 Pi 默认配置，适合实现、测试和开放式任务。项目也可以提供[自定义 Agent definition](docs/agent-definitions.md)。
+新 Agent 使用 Pi 默认配置，能力与创建者相同，适合实现、测试和开放式任务；只读调查等约束直接写在当次任务描述里。
 
 Agent 的 pane 保持运行时，其 session 和上下文可以持续复用。关闭 pane 或 tab 会停止对应的 live Agent，但不会删除 Pi session 或可选 worktree。
 

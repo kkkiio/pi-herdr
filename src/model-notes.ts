@@ -28,8 +28,7 @@ export const MODEL_NOTES: Record<string, ModelNote> = {
 	},
 	"gpt-5.6-luna": {
 		size: "small",
-		strengths:
-			"cheap",
+		strengths: "cheap",
 	},
 	"gpt-5.6-terra": {
 		size: "medium",
@@ -41,8 +40,7 @@ export const MODEL_NOTES: Record<string, ModelNote> = {
 	},
 	"gpt-5.6-sol": {
 		size: "big",
-		strengths:
-			"rigorous",
+		strengths: "rigorous",
 	},
 };
 

@@ -36,7 +36,6 @@ pi-herdr 不维护 offline Agent registry、durable mailbox、session-to-pane �
 Agent({
   description: string,
   prompt: string,
-  definition?: string,
   name: string,
   model?: string | string[],
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
@@ -51,19 +50,18 @@ Agent({
 
 - `description` 是工具结果与 UI 详情中的简短说明，不参与 tab label。
 - `prompt` 是第一条消息，使用与 `SendMessage` 相同的 `<from ...>` envelope。
-- `definition` 可选：接受 catalog name，或以 `.md` 结尾的绝对路径、显式相对路径；完整选择与解析规则见 [Agent Definitions](agent-definitions.md)。省略时使用 Pi 默认配置，不加任何裁剪或 prompt 覆盖。
 - `name` 是唯一的 Herdr live route name，并作为新 Agent tab 的初始 label；必须符合 `[a-z][a-z0-9_-]{0,31}`。
-- `model` 与 `thinking` 覆盖 definition 的初始值；启动后仍可使用 Pi 原生能力修改。
+- `model` 与 `thinking` 设置新 Agent 的初始模型与 thinking level；启动后仍可使用 Pi 原生能力修改。
 - `cwd` 选择新 Agent 的工作目录；相对路径以调用时的 cwd 为基准，未设置时继承该 cwd。
 - `isolation: "worktree"` 从解析后的 `cwd` 创建独立 worktree workspace；未设置时在共享 workspace 中创建使用该 cwd 的 tab。
 
-Definition path 只选择角色配置，不改变 workspace 或 cwd。相对 definition path 与相对 `cwd` 分别以调用时的 cwd 解析，二者不互相推导或校验。
+新 Agent 使用 Pi 默认配置，没有角色类型或 definition 参数；只读、审查姿态等约束写在当次 prompt 里，不进 Agent 的长期身份。设计理由见 [ADR-006](adr/006-no-subagent-type-parameter.md)。
 
 ## Uniform Extension Surface
 
-所有 Herdr 内的 Pi 会话运行同一个 pi-herdr extension 入口，注册相同的工具表面与 `/agents`。创建新 Agent 时 `agent.start.args` 只携带短 flag（`--extension`、模型与工具参数、definition 文件路径），不传任何角色标记。
+所有 Herdr 内的 Pi 会话运行同一个 pi-herdr extension 入口，注册相同的工具表面与 `/agents`。创建新 Agent 时 `agent.start.args` 只携带短 flag（`--extension`、模型与 thinking 参数），不传任何角色标记。
 
-递归创建（Agent 创建 Agent）不受限制。实践中 Agent 没有主动递归创建的倾向；即使发生，代价只是一个可见、可关闭的 tab。Definition 加载的普通 extensions 与 skills 不改变 pi-herdr 自己的工具表面。
+递归创建（Agent 创建 Agent）不受限制。实践中 Agent 没有主动递归创建的倾向；即使发生，代价只是一个可见、可关闭的 tab。
 
 共享 workspace 与 worktree 使用完全相同的启动参数。`worktree.create` 没有环境变量参数。
 
@@ -71,9 +69,9 @@ Definition path 只选择角色配置，不改变 workspace 或 cwd。相对 def
 
 共享 workspace 创建流程：
 
-1. 校验 Herdr 环境、配置、definition selector、cwd、name 和初始模型。
+1. 校验 Herdr 环境、配置、cwd、name 和初始模型。
 2. `tab.create` 使用解析后的 cwd 和 Agent name 创建不抢焦点的 tab，并返回 root pane。
-3. `agent.start` 在 root pane 中启动全新、持久的 Pi session；definition 配置通过 Pi args 传入。
+3. `agent.start` 在 root pane 中启动全新、持久的 Pi session；模型与 thinking 覆盖通过 Pi args 传入。
 4. 只用 `agent.get` 轮询，直到 `launch_pending: false` 且 `interactive_ready: true`。
 5. `agent.prompt` 投递带 `<from ...>` envelope 的初始请求。
 6. 只有 prompt 被 Herdr 接受后才记录 ownership，并返回 `launched`。
@@ -100,7 +98,7 @@ Ownership 记录使用 pane ID 作为稳定键，Agent name 是 live 路由属�
 
 ## Ownership and Lifecycle
 
-每个会话只在内存中记录自己成功创建且仍 live 的 Agent，记录包含 description、definition、createdBy pane 和最新 `AgentInfo`。它只用于给 `ListAgents` 附加来源，以及在 lifecycle event 或 reconciliation 后释放已经消失的 runtime。
+每个会话只在内存中记录自己成功创建且仍 live 的 Agent，记录包含 description、createdBy pane 和最新 `AgentInfo`。它只用于给 `ListAgents` 附加来源，以及在 lifecycle event 或 reconciliation 后释放已经消失的 runtime。
 
 会话重启后 ownership 清空；先前仍 live 的 Agent 继续保留 session、上下文和完整工具表面，但在其他会话看来是普通 peer。
 
