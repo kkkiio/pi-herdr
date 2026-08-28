@@ -102,7 +102,7 @@ When("a real Pi RPC session starts inside Herdr", async function (this: PiHerdrW
 	this.state.set("rpcSurface", session.observation);
 });
 
-Then("the RPC session exposes exactly four pi-herdr tools and the agents command", function (this: PiHerdrWorld) {
+Then("the RPC session exposes exactly three pi-herdr tools and the agents command", function (this: PiHerdrWorld) {
 	const observation = this.state.get("rpcSurface") as PiSurfaceObservation;
 	assert.deepEqual(observation.activeTools, ["Agent", "ListAgents", "SendMessage"]);
 	assert.deepEqual(
@@ -176,4 +176,21 @@ Then(
 
 Then("no model awareness notes are produced", function (this: PiHerdrWorld) {
 	assert.equal(this.state.get("modelNotes"), undefined);
+});
+
+When("a launch plan is resolved with a deep multi-byte extension path", function (this: PiHerdrWorld) {
+	const runtime = new AgentRuntime(`/package/${"深目录/".repeat(200)}dist/index.js`);
+	const context = this.state.get("modelContext") as ExtensionContext;
+	try {
+		runtime.resolveLaunchPlan({}, context);
+		assert.fail("Expected an oversized launch argv to fail.");
+	} catch (error) {
+		this.state.set("oversizedArgvError", error);
+	}
+});
+
+Then("the launch plan fails within the tty byte budget", function (this: PiHerdrWorld) {
+	const error = this.state.get("oversizedArgvError");
+	assert.ok(error instanceof Error);
+	assert.match(error.message, /tty safety budget/);
 });

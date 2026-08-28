@@ -14,7 +14,7 @@ Feature: Control surface and model awareness
   Scenario: Real Pi RPC loads the extension surface inside Herdr
     Given a fake protocol 17 Herdr for real Pi RPC sessions
     When a real Pi RPC session starts inside Herdr
-    Then the RPC session exposes exactly four pi-herdr tools and the agents command
+    Then the RPC session exposes exactly three pi-herdr tools and the agents command
 
   Scenario: Model resolution honors explicit candidates then the Primary model
     Given authenticated Primary models
@@ -30,3 +30,8 @@ Feature: Control surface and model awareness
   Scenario: Model awareness notes disappear when no noted model is available
     When model awareness notes are computed for available model ids "some-other-model"
     Then no model awareness notes are produced
+
+  Scenario: Oversized launch argv is rejected before typing into the tty
+    Given authenticated Primary models
+    When a launch plan is resolved with a deep multi-byte extension path
+    Then the launch plan fails within the tty byte budget

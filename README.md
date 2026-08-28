@@ -37,5 +37,5 @@ pi-herdr 只封装后台 Agent 工作流需要的 Herdr 能力，不替代 Herdr
 | Pi 能力                     | Herdr RPC                                                                     | 用户可见行为                                                   |
 | --------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `Agent`                     | `tab.create` / `worktree.create`, `tab.rename`, `agent.start`, `agent.prompt` | 在独立 tab 中启动持久 Agent，可选择共享目录或独立 Git worktree |
-| `ListAgents`, `SendMessage` | `agent.list`, `agent.prompt`                                                  | 发现并联系 live Agent 或 Pi peer；不提供离线消息队列           |
+| `ListAgents`, `SendMessage` | `agent.list`, `agent.get`, `agent.prompt`                                     | 发现并联系 live Agent 或 Pi peer；不提供离线消息队列           |
 | 其他 Herdr 管理能力         | 其余 `workspace.*`、`tab.*`、`pane.*`、`worktree.*`、`layout.*`               | 不由 pi-herdr 封装，直接使用 Herdr                             |
