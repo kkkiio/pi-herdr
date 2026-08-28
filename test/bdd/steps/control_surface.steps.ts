@@ -26,8 +26,8 @@ When("pi-herdr registers its control tools", function (this: PiHerdrWorld) {
 	this.state.set("registeredTools", registered);
 });
 
-Then("the surface has Agent, ListAgents, ReadAgent, and SendMessage", function (this: PiHerdrWorld) {
-	assert.deepEqual(this.state.get("registeredTools"), ["Agent", "ListAgents", "ReadAgent", "SendMessage"]);
+Then("the surface has Agent, ListAgents, and SendMessage", function (this: PiHerdrWorld) {
+	assert.deepEqual(this.state.get("registeredTools"), ["Agent", "ListAgents", "SendMessage"]);
 });
 
 Given("HERDR_ENV is not 1", function (this: PiHerdrWorld) {
@@ -104,10 +104,10 @@ When("a real Pi RPC session starts inside Herdr", async function (this: PiHerdrW
 
 Then("the RPC session exposes exactly four pi-herdr tools and the agents command", function (this: PiHerdrWorld) {
 	const observation = this.state.get("rpcSurface") as PiSurfaceObservation;
-	assert.deepEqual(observation.activeTools, ["Agent", "ListAgents", "ReadAgent", "SendMessage"]);
+	assert.deepEqual(observation.activeTools, ["Agent", "ListAgents", "SendMessage"]);
 	assert.deepEqual(
-		observation.allTools.filter((name) => ["Agent", "ListAgents", "ReadAgent", "SendMessage"].includes(name)),
-		["Agent", "ListAgents", "ReadAgent", "SendMessage"],
+		observation.allTools.filter((name) => ["Agent", "ListAgents", "SendMessage"].includes(name)),
+		["Agent", "ListAgents", "SendMessage"],
 	);
 	assert.ok(observation.commands.some((command) => command.name === "agents" && command.source === "extension"));
 	assert.ok(observation.rpcCommands.some((command) => command.name === "agents" && command.source === "extension"));

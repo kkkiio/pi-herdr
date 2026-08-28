@@ -1,7 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-import { AGENT_READ_SOURCES } from "./herdr-types.js";
 import { THINKING_LEVELS } from "./agent-runtime.js";
 import type { AgentSupervisor } from "./agent-supervisor.js";
 import { availableModelNotes } from "./model-notes.js";
@@ -54,49 +53,12 @@ export function registerAgentTools(
 		name: "ListAgents",
 		label: "List Agents",
 		description:
-			"List every live Agent and Pi peer visible through the current Herdr session, preserving Herdr AgentInfo fields and statuses.",
+			"List every live Agent and Pi peer visible through the current Herdr session, preserving Herdr AgentInfo fields and statuses. For richer observation or control (screen text, waits, terminal input), use the herdr CLI through bash instead: herdr agent read, herdr agent wait, herdr pane. Run herdr --help to discover the full surface.",
 		promptSnippet: "List live Agents and peers in the current Herdr session.",
 		promptGuidelines: ["Use ListAgents to refresh live Agent addresses."],
 		parameters: Type.Object({}, { additionalProperties: false }),
 		execute: async (_toolCallId, _params, signal) => {
 			const result = await supervisor.list(signal);
-			return {
-				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
-				details: result,
-			};
-		},
-	});
-
-	pi.registerTool({
-		name: "ReadAgent",
-		label: "Read Agent",
-		description:
-			"Read a live Agent's terminal screen text through Herdr agent.read. The text is the Agent's own TUI, including its input queue, approval prompts, and working indicator. Passive observation: does not change the Agent or mark anything seen. Use it to inspect what a background Agent is currently showing before deciding whether to wait for it or message it.",
-		promptSnippet: "Read a live Agent's current terminal text.",
-		promptGuidelines: [
-			"Use ReadAgent to inspect a live Agent's screen instead of messaging it to ask what it is doing.",
-			'While an Agent is working or blocked, long "recent" reads may fail with agent_not_idle; use source "visible" or retry when the Agent is idle.',
-		],
-		parameters: Type.Object(
-			{
-				agent: Type.String({ minLength: 1, description: "Live Agent name or pane ID." }),
-				source: Type.Optional(
-					Type.Union(
-						AGENT_READ_SOURCES.map((source) => Type.Literal(source)),
-						{
-							description:
-								'"recent" (default): last rendered rows plus scrollback; "visible": current screen only, also works while the Agent is working; "recent_unwrapped": recent rows with wrapped lines joined; "detection": the snapshot Herdr uses for status detection.',
-						},
-					),
-				),
-				lines: Type.Optional(
-					Type.Integer({ minimum: 1, description: "Number of trailing rows for recent sources (default 80)." }),
-				),
-			},
-			{ additionalProperties: false },
-		),
-		execute: async (_toolCallId, params, signal) => {
-			const result = await supervisor.readScreen(params.agent, { source: params.source, lines: params.lines }, signal);
 			return {
 				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
 				details: result,

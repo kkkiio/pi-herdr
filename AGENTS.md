@@ -16,12 +16,12 @@ pi-herdr 是 TypeScript ESM Pi extension。
 │   └── workflows/ci.yml                   # main push/PR 全量回归 CI
 ├── docs/
 │   ├── agent-contract.md                  # 创建、统一工具表面、name、持久性与生命周期
-│   ├── messaging.md                       # ListAgents、ReadAgent、SendMessage 与 reply
 │   ├── herdr-rpc.md                       # Socket protocol、事件、重试与 RPC 边界
 │   └── adr/                               # Accepted 设计决策；修改 lifecycle/messaging/transport/naming 行为前先读对应 ADR
 │       ├── 001-persistent-background-agents.md  # Agent = herdr tab 中后台持久的 Pi session；不复活、不建信箱
 │       ├── 002-default-model-selection.md       # 模型解析：显式参数 > 继承调用方
 │       ├── 004-herdr-socket-integration.md      # 独立 RPC socket、事件流重连与 snapshot 对账
+│       ├── 007-messaging-primitives.md          # 消息原语只有 ListAgents/SendMessage；观察走 herdr CLI，不封装工具
 │       └── 006-no-subagent-type-parameter.md    # 不设 subagent type/definition 参数；角色约束走任务级 prompt
 ├── src/
 │   ├── index.ts                           # 单 extension 入口与工具装配
@@ -29,7 +29,7 @@ pi-herdr 是 TypeScript ESM Pi extension。
 │   ├── agent-supervisor.ts                # Live ownership、创建事务与工具语义
 │   ├── herdr-client.ts                    # 独立 RPC socket、event stream 与只读重试
 │   ├── herdr-types.ts                     # Herdr protocol 17 wire types
-│   ├── tools.ts                           # 四个 Pi tool 的 schema 与注册
+│   ├── tools.ts                           # 三个 Pi tool 的 schema 与注册
 │   └── ui.ts                              # `/agents` live runtime UI
 ├── test/
 │   ├── bdd/                               # Cucumber 全量回归 features/steps/support；@herdr-e2e 为真机场景

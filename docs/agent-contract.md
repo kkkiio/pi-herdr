@@ -2,7 +2,7 @@
 
 pi-herdr 是 Pi 与 Herdr 之间的适配层：它把 Herdr 的能力以 Pi 工具和消息约定的形式暴露，不拥有或管理 Agent 的生命周期——生命周期归 Herdr（pane/tab）和用户。
 
-任何运行在 Herdr 中、加载了 pi-herdr 的 Pi 会话都获得相同的控制表面（`Agent`、`ListAgents`、`ReadAgent`、`SendMessage` 与 `/agents`）。通过 `Agent` 创建的 Agent 是独立 Herdr tab 的受管 pane 中运行的后台 Pi 会话，使用正常落盘的全新 session；完成一次请求后保持 idle，保留上下文并等待后续消息。它与创建者的唯一区别是"被谁创建"这一事实，工具能力完全相同——包括继续创建别的 Agent。
+任何运行在 Herdr 中、加载了 pi-herdr 的 Pi 会话都获得相同的控制表面（`Agent`、`ListAgents`、`SendMessage` 与 `/agents`）。通过 `Agent` 创建的 Agent 是独立 Herdr tab 的受管 pane 中运行的后台 Pi 会话，使用正常落盘的全新 session；完成一次请求后保持 idle，保留上下文并等待后续消息。它与创建者的唯一区别是"被谁创建"这一事实，工具能力完全相同——包括继续创建别的 Agent。
 
 ```text
 Herdr live session

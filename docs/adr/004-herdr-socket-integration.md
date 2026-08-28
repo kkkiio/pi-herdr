@@ -68,7 +68,7 @@ Push envelope 使用 Herdr 的实际 wire schema，而不是把 request type 原
 
 首次 event subscription 尚未收到 acknowledgement 时只进行有限次连接尝试；曾成功建立的 event socket 断开后以封顶退避持续重连、重新订阅并获取 `session.snapshot`。正常 discovery 继续通过 `agent.list` 核对 live 集合。Reconciliation 只删除不再 live 的本地记录并刷新现有引用，不恢复 runtime 或 ownership。普通 request socket 的一次失败不会重放 mutation。
 
-`ping`、`session.snapshot`、`agent.list`、`agent.get`、`agent.read` 等幂等读取可以重试。启动就绪轮询也只调用 `agent.get`。`agent.start`、`agent.prompt`、`tab.rename`、close、tab/worktree mutation 不自动重放，避免响应丢失后产生重复副作用。
+`ping`、`session.snapshot`、`agent.list`、`agent.get` 等幂等读取可以重试。启动就绪轮询也只调用 `agent.get`。`agent.start`、`agent.prompt`、`tab.rename`、close、tab/worktree mutation 不自动重放，避免响应丢失后产生重复副作用。
 
 ### 8. RPC boundary
 
@@ -76,7 +76,6 @@ Push envelope 使用 Herdr 的实际 wire schema，而不是把 request type 原
 | ------------------------------------ | ------------------------------------------------------------------------------------ |
 | Protocol diagnostics and bootstrap   | `ping`, `session.snapshot`                                                           |
 | Live discovery and target resolution | `agent.list`, `agent.get`                                                            |
-| Screen observation                   | `agent.read`                                                                         |
 | Shared Agent container               | `tab.create`                                                                         |
 | Worktree Agent container             | `worktree.create`, `tab.rename`                                                      |
 | Start Pi and wait until interactive  | `agent.start`, read-only `agent.get` polling                                         |

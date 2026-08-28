@@ -4,7 +4,7 @@ Feature: Control surface and model awareness
   Scenario: The extension registers one uniform control tool surface
     Given a Pi tool registration recorder
     When pi-herdr registers its control tools
-    Then the surface has Agent, ListAgents, ReadAgent, and SendMessage
+    Then the surface has Agent, ListAgents, and SendMessage
 
   Scenario: Outside Herdr the extension is silent
     Given HERDR_ENV is not 1
