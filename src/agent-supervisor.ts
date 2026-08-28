@@ -4,7 +4,6 @@ import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { AgentDefinitionStore, type ResolvedAgentDefinition } from "./agent-definitions.js";
 import { AgentRuntime, type AgentOverrides } from "./agent-runtime.js";
 import { HerdrClient, HerdrRpcError } from "./herdr-client.js";
 import type { AgentInfo, HerdrEvent, SessionSnapshot } from "./herdr-types.js";
@@ -12,7 +11,6 @@ import type { AgentInfo, HerdrEvent, SessionSnapshot } from "./herdr-types.js";
 export interface LaunchAgentRequest extends AgentOverrides {
 	description: string;
 	prompt: string;
-	definition?: string;
 	name: string;
 	cwd?: string;
 	isolation?: "worktree";
@@ -25,7 +23,6 @@ export interface ListedAgent extends AgentInfo {
 
 interface OwnedAgent {
 	description: string;
-	definition: ResolvedAgentDefinition;
 	agent: AgentInfo;
 	createdByPaneId: string;
 }
@@ -56,7 +53,6 @@ export class AgentSupervisor {
 
 	constructor(
 		private readonly client: HerdrClient,
-		private readonly definitions: AgentDefinitionStore,
 		private readonly runtime: AgentRuntime,
 		private readonly callerPaneId: string,
 		private readonly environment: NodeJS.ProcessEnv = process.env,
@@ -130,16 +126,12 @@ export class AgentSupervisor {
 					? primaryConfiguration
 					: this.readConfiguration(requestedCwd)
 				: Promise.resolve(undefined);
-		const [configuration, launchConfiguration, callerResult, agentsResult, definition] = await Promise.all([
+		const [configuration, launchConfiguration, callerResult, agentsResult] = await Promise.all([
 			primaryConfiguration,
 			sharedLaunchConfiguration,
 			this.client.requestRead("agent.get", { target: this.callerPaneId }, ctx.signal),
 			this.client.requestRead("agent.list", {}, ctx.signal),
-			this.definitions.load(request.definition, ctx.cwd),
 		]);
-		if (definition.enabled === false) {
-			throw new Error(`Agent definition ${request.definition} is disabled.`);
-		}
 		const livePanes = new Set(agentsResult.agents.map((agent) => agent.pane_id));
 		for (const paneId of ownedBeforeRead) {
 			if (!livePanes.has(paneId)) this.owned.delete(paneId);
@@ -161,7 +153,7 @@ export class AgentSupervisor {
 			launchConfiguration === undefined ? configuration.sessionDirectory : launchConfiguration.sessionDirectory;
 		let startedAgent: AgentInfo | undefined;
 		try {
-			const plan = this.runtime.resolveLaunchPlan(definition, request, ctx);
+			const plan = this.runtime.resolveLaunchPlan(request, ctx);
 			if (ctx.signal?.aborted) throw new Error("Agent launch was cancelled before resources were created.");
 
 			if (request.isolation === "worktree") {
@@ -206,7 +198,6 @@ export class AgentSupervisor {
 			});
 			this.owned.set(prompted.agent.pane_id, {
 				description: request.description,
-				definition,
 				agent: prompted.agent,
 				createdByPaneId: callerResult.agent.pane_id,
 			});

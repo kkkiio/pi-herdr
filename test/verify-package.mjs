@@ -18,9 +18,7 @@ function run(args, cwd) {
 
 try {
 	// Pack for real, then install the tarball into a clean project the way pi
-	// installs distributed packages: production dependencies only. A bare import
-	// would not touch lazily loaded resources, so the smoke also reads the
-	// bundled definition catalog.
+	// installs distributed packages: production dependencies only.
 	const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 	const packReport = JSON.parse(run(["pack", "--json", "--ignore-scripts", "--pack-destination", work], process.cwd()));
 	const tarball = Array.isArray(packReport) ? packReport[0]?.filename : undefined;
@@ -35,13 +33,6 @@ try {
 	const entry = await import(pathToFileURL(installedEntry).href);
 	if (typeof entry.default !== "function" || typeof entry.HerdrClient !== "function") {
 		throw new Error("The installed extension entry does not expose its default factory and HerdrClient API.");
-	}
-	const store = new entry.AgentDefinitionStore({ globalDir: join(work, "no-global-definitions") });
-	const catalog = await store.catalog();
-	if (!catalog.entries.some((item) => item.name === "explorer") || catalog.diagnostics.length > 0) {
-		throw new Error(
-			`The installed package does not expose the bundled explorer definition: ${catalog.diagnostics.join("; ") || "no entries"}`,
-		);
 	}
 
 	process.stdout.write("npm package install smoke verified.\n");

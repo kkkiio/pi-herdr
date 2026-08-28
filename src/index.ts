@@ -2,7 +2,6 @@ import { fileURLToPath } from "node:url";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-import { AgentDefinitionStore } from "./agent-definitions.js";
 import { AgentRuntime } from "./agent-runtime.js";
 import { AgentSupervisor } from "./agent-supervisor.js";
 import { HerdrClient } from "./herdr-client.js";
@@ -77,14 +76,11 @@ export default function piHerdrExtension(pi: ExtensionAPI): void {
 				setConnectionState("connected");
 			},
 		});
-		const definitions = new AgentDefinitionStore();
 		const runtime = new AgentRuntime(fileURLToPath(import.meta.url));
-		supervisor = new AgentSupervisor(client, definitions, runtime, callerPaneId);
-		const catalog = await definitions.catalog();
+		supervisor = new AgentSupervisor(client, runtime, callerPaneId);
 		const availableModelIds = ctx.modelRegistry.getAvailable().map((model) => model.id);
-		registerAgentTools(pi, supervisor, catalog.entries, availableModelIds);
+		registerAgentTools(pi, supervisor, availableModelIds);
 		registerAgentsUi(pi, supervisor);
-		for (const diagnostic of catalog.diagnostics) ctx.ui.notify(diagnostic, "error");
 		const diagnostic = await supervisor.configurationDiagnostic(ctx.cwd);
 		if (diagnostic) ctx.ui.notify(diagnostic, "error");
 
@@ -111,13 +107,6 @@ export default function piHerdrExtension(pi: ExtensionAPI): void {
 	});
 }
 
-export { AgentDefinitionStore } from "./agent-definitions.js";
-export type {
-	AgentDefinition,
-	AgentDefinitionCatalog,
-	AgentDefinitionCatalogEntry,
-	ResolvedAgentDefinition,
-} from "./agent-definitions.js";
 export { AgentRuntime } from "./agent-runtime.js";
 export type { AgentLaunchPlan, AgentOverrides, ThinkingLevel } from "./agent-runtime.js";
 export { AgentSupervisor } from "./agent-supervisor.js";

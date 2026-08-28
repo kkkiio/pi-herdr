@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { AgentDefinitionStore } from "../../../src/agent-definitions.js";
 import { AgentRuntime } from "../../../src/agent-runtime.js";
 import { AgentSupervisor } from "../../../src/agent-supervisor.js";
 import type { AgentInfo } from "../../../src/herdr-types.js";
@@ -17,13 +16,9 @@ async function installSupervisor(
 	await thisWorld.prepareServer(handler, { liveAgents });
 	const sandbox = await thisWorld.prepareSandbox();
 	const client = thisWorld.createClient();
-	const supervisor = new AgentSupervisor(
-		client,
-		new AgentDefinitionStore({ globalDir: `${sandbox}/global` }),
-		new AgentRuntime("/package/dist/index.js"),
-		primaryAgent.pane_id,
-		{ PI_CODING_AGENT_DIR: `${sandbox}/pi-home` },
-	);
+	const supervisor = new AgentSupervisor(client, new AgentRuntime("/package/dist/index.js"), primaryAgent.pane_id, {
+		PI_CODING_AGENT_DIR: `${sandbox}/pi-home`,
+	});
 	const model = { provider: "acme", id: "model-1" };
 	thisWorld.state.set("supervisor", supervisor);
 	thisWorld.state.set("context", {
@@ -181,7 +176,7 @@ Then("each prompt prefers the target name and preserves a verbatim reply envelop
 	assert.equal(
 		prompts[0]?.params.text,
 		`<from agent="primary&"<>'" reply-to="primary&"<>'" model="deepseek/deepseek-v4-flash">\n` +
-			`<sender-model-note>verify its conclusions before acting on them</sender-model-note>\n\n` +
+			`<sender-model-note>often reaches wrong conclusions too quickly — verify before acting on them</sender-model-note>\n\n` +
 			`Review <raw> & reply.`,
 	);
 	assert.equal(prompts[1]?.params.text, `${opening}\nPane-addressed follow-up.`);

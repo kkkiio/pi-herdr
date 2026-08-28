@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { AgentDefinitionStore } from "../../../src/agent-definitions.js";
 import { AgentRuntime } from "../../../src/agent-runtime.js";
 import { AgentSupervisor } from "../../../src/agent-supervisor.js";
 import { HerdrClient } from "../../../src/herdr-client.js";
@@ -45,7 +44,6 @@ Given(
 		this.trackCleanup(async () => client.dispose());
 		const supervisor = new AgentSupervisor(
 			client,
-			new AgentDefinitionStore({ globalDir: join(sandbox, "global") }),
 			new AgentRuntime(join(repository, "dist", "index.js")),
 			caller.paneId,
 			{ PI_CODING_AGENT_DIR: harness.piAgentDir },

@@ -1,7 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
-import type { AgentDefinitionCatalogEntry } from "./agent-definitions.js";
 import { THINKING_LEVELS } from "./agent-runtime.js";
 import type { AgentSupervisor } from "./agent-supervisor.js";
 import { availableModelNotes } from "./model-notes.js";
@@ -9,14 +8,10 @@ import { availableModelNotes } from "./model-notes.js";
 export function registerAgentTools(
 	pi: ExtensionAPI,
 	supervisor: AgentSupervisor,
-	catalog: readonly AgentDefinitionCatalogEntry[] = [],
 	availableModelIds: readonly string[] = [],
 ): void {
 	const thinkingSchema = Type.Union(THINKING_LEVELS.map((level) => Type.Literal(level)));
 	const modelNotes = availableModelNotes(availableModelIds);
-	const catalogDescription = catalog.length
-		? catalog.map((entry) => `${entry.name}${entry.description ? ` — ${entry.description}` : ""}`).join("; ")
-		: "none";
 
 	pi.registerTool({
 		name: "Agent",
@@ -24,20 +19,11 @@ export function registerAgentTools(
 		description:
 			"Launch a persistent background Agent in a new Herdr tab. Returns after startup and initial prompt delivery, not after the work finishes. Use ListAgents and SendMessage for later interaction.",
 		promptSnippet: "Launch a persistent background Agent in Herdr.",
-		promptGuidelines: [
-			"When a project-specific role would help, prefer checking the task-relevant repository's .agents/agents directories and pass the selected Markdown path explicitly. Use a catalog definition only when one of the listed roles fits the task; otherwise omit `definition` to use the Pi default agent.",
-			...(modelNotes ? [modelNotes] : []),
-		],
+		promptGuidelines: [...(modelNotes ? [modelNotes] : [])],
 		parameters: Type.Object(
 			{
 				description: Type.String({ minLength: 1, description: "Short human-readable purpose." }),
 				prompt: Type.String({ minLength: 1, description: "The first concrete request for the Agent." }),
-				definition: Type.Optional(
-					Type.String({
-						minLength: 1,
-						description: `Catalog name or absolute/explicit relative .md path. Omit to launch with Pi defaults. Available catalog: ${catalogDescription}`,
-					}),
-				),
 				name: Type.String({
 					pattern: "^[a-z][a-z0-9_-]{0,31}$",
 					description: "Unique live Agent name; must match [a-z][a-z0-9_-]{0,31}.",
@@ -47,7 +33,7 @@ export function registerAgentTools(
 				),
 				thinking: Type.Optional(thinkingSchema),
 				cwd: Type.Optional(
-					Type.String({ minLength: 1, description: "Agent cwd, resolved independently from definition." }),
+					Type.String({ minLength: 1, description: "Agent cwd, resolved independently from the launch cwd." }),
 				),
 				isolation: Type.Optional(Type.Literal("worktree")),
 			},
@@ -69,7 +55,10 @@ export function registerAgentTools(
 		description:
 			"List every live Agent and Pi peer visible through the current Herdr session, preserving Herdr AgentInfo fields and statuses.",
 		promptSnippet: "List live Agents and peers in the current Herdr session.",
-		promptGuidelines: ["Use ListAgents to refresh live Agent addresses."],
+		promptGuidelines: [
+			"Use ListAgents to refresh live Agent addresses.",
+			"For richer observation or control (screen text, waits, terminal input), use the herdr CLI through bash instead of a dedicated tool: herdr agent read, herdr agent wait, herdr pane. Run herdr --help to discover the full surface.",
+		],
 		parameters: Type.Object({}, { additionalProperties: false }),
 		execute: async (_toolCallId, _params, signal) => {
 			const result = await supervisor.list(signal);

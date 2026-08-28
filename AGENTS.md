@@ -10,31 +10,26 @@ pi-herdr 是 TypeScript ESM Pi extension。
 .
 ├── AGENTS.md                              # 开发 Agent 的项目规则与操作指南
 ├── README.md                              # 用户入口、安装状态和最短使用示例
-├── agents/                                # Bundled Agent definitions；npm 发布资源
-│   └── explorer.md                        # 带 Bash 的只读搜索 Agent；省略 definition 即为 Pi 默认 Agent
 ├── assets/
 │   └── pi-herdr-logo.png                  # README 品牌图
 ├── .github/
 │   └── workflows/ci.yml                   # main push/PR 全量回归 CI
 ├── docs/
 │   ├── agent-contract.md                  # 创建、统一工具表面、name、持久性与生命周期
-│   ├── messaging.md                       # ListAgents、SendMessage 与 reply
-│   ├── agent-definitions.md               # Markdown frontmatter 用户参考
 │   ├── herdr-rpc.md                       # Socket protocol、事件、重试与 RPC 边界
 │   └── adr/                               # Accepted 设计决策；修改 lifecycle/messaging/transport/naming 行为前先读对应 ADR
 │       ├── 001-persistent-background-agents.md  # Agent = herdr tab 中后台持久的 Pi session；不复活、不建信箱
-│       ├── 002-default-model-selection.md       # 模型解析：显式参数 > definition > 继承调用方
-│       ├── 003-agent-definitions.md             # 显式项目 definition 选择 + 单扩展双角色
-│       ├── 004-herdr-socket-integration.md      # Protocol 17：独立 RPC socket、事件流重连与 snapshot 对账
-│       └── 005-file-path-prompt-delivery.md     # 短 argv 纪律；prompt 走文件路径与 promptGuidelines
+│       ├── 002-default-model-selection.md       # 模型解析：显式参数 > 继承调用方
+│       ├── 004-herdr-socket-integration.md      # 独立 RPC socket、事件流重连与 snapshot 对账
+│       ├── 007-messaging-primitives.md          # 消息原语只有 ListAgents/SendMessage；观察走 herdr CLI，不封装工具
+│       └── 006-no-subagent-type-parameter.md    # 不设 subagent type/definition 参数；角色约束走任务级 prompt
 ├── src/
 │   ├── index.ts                           # 单 extension 入口与工具装配
-│   ├── agent-definitions.ts               # Definition catalog、显式路径与严格 YAML 解析
 │   ├── agent-runtime.ts                   # Pi 启动参数、模型与 prompt
 │   ├── agent-supervisor.ts                # Live ownership、创建事务与工具语义
 │   ├── herdr-client.ts                    # 独立 RPC socket、event stream 与只读重试
 │   ├── herdr-types.ts                     # Herdr protocol 17 wire types
-│   ├── tools.ts                           # 四个 Pi tool 的 schema 与注册
+│   ├── tools.ts                           # 三个 Pi tool 的 schema 与注册
 │   └── ui.ts                              # `/agents` live runtime UI
 ├── test/
 │   ├── bdd/                               # Cucumber 全量回归 features/steps/support；@herdr-e2e 为真机场景
@@ -48,7 +43,6 @@ pi-herdr 是 TypeScript ESM Pi extension。
 
 - **Agent** — 在 herdr tab 的受管 pane 中运行的持久后台 pi 会话；由另一个会话通过 `Agent` 工具创建，能力与创建者相同。
 - **Creator / 创建者** — 调用 `Agent` 工具创建另一个 Agent 的会话；创建只是内存中的事实记录，不带来管理权限。
-- **Agent definition** — 用户级/bundled catalog 中按名称选择，或由调用方从项目 `.pi/agents`、`.agents/agents` 显式选择路径的角色配置与 prompt。
 - **Agent name** — herdr live Agent alias；创建 Agent 时也用作专用 tab 的初始 label。
 - **Agent tab** — 一个 Agent 在 herdr 中的用户可见容器。
 - **Managed pane** — Agent tab 内实际运行 pi 进程、承载 herdr lifecycle state 的 pane。
@@ -107,12 +101,6 @@ Releases use an agent-driven Release PR, no bot and (during v0.x) no CHANGELOG.m
 4. Publish with `npm publish`. `prepublishOnly` runs the full regression plus the real-Herdr e2e on the publishing machine, which covers macOS-specific delivery behavior that Linux CI cannot see; the publishing machine therefore needs a `herdr` binary (or `HERDR_BIN`).
 
 ### Documentation Verification
-
-When changing `agents/*.md`, validate bundled frontmatter:
-
-```bash
-ruby -ryaml -e 'ARGV.each { |path| text = File.read(path); match = text.match(/\A---\n(.*?)\n---\n/m) or abort("missing frontmatter: #{path}"); YAML.safe_load(match[1], permitted_classes: [], aliases: false); puts "ok #{path}" }' agents/*.md
-```
 
 When changing Markdown links, validate local targets:
 

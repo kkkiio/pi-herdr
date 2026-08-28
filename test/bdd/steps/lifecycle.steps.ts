@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { Given, Then, When } from "@cucumber/cucumber";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-import { AgentDefinitionStore } from "../../../src/agent-definitions.js";
 import { AgentRuntime } from "../../../src/agent-runtime.js";
 import { AgentSupervisor } from "../../../src/agent-supervisor.js";
 import type { AgentInfo } from "../../../src/herdr-types.js";
@@ -111,13 +110,9 @@ async function installLifecycle(
 	});
 	const client = thisWorld.createClient();
 	const sandbox = await thisWorld.prepareSandbox();
-	const supervisor = new AgentSupervisor(
-		client,
-		new AgentDefinitionStore({ globalDir: `${sandbox}/global` }),
-		new AgentRuntime("/package/dist/index.js"),
-		primaryAgent.pane_id,
-		{ PI_CODING_AGENT_DIR: `${sandbox}/pi-home` },
-	);
+	const supervisor = new AgentSupervisor(client, new AgentRuntime("/package/dist/index.js"), primaryAgent.pane_id, {
+		PI_CODING_AGENT_DIR: `${sandbox}/pi-home`,
+	});
 	const model = { provider: "acme", id: "model-1" };
 	const context = {
 		cwd: sandbox,

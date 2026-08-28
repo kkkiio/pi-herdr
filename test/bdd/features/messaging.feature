@@ -12,3 +12,4 @@ Feature: Live Agent discovery and messaging
     When the Primary sends messages by name and by pane ID
     Then Herdr resolves both supplied routes
     And each prompt prefers the target name and preserves a verbatim reply envelope
+

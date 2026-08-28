@@ -1,5 +1,5 @@
-Feature: Control surface and Agent definitions
-  One extension exposes a uniform control tool surface and resolves explicit paths or a strict fallback catalog.
+Feature: Control surface and model awareness
+  One extension exposes a uniform control tool surface and resolves explicit model overrides.
 
   Scenario: The extension registers one uniform control tool surface
     Given a Pi tool registration recorder
@@ -16,22 +16,12 @@ Feature: Control surface and Agent definitions
     When a real Pi RPC session starts inside Herdr
     Then the RPC session exposes exactly three pi-herdr tools and the agents command
 
-  Scenario: A malformed global definition never falls through to bundled catalog entries
-    Given a malformed global definition shadows a valid bundled definition
-    When the selected definition is loaded
-    Then definition loading reports the global schema error
-
-  Scenario: Model resolution uses the selected definition then the Primary fallback
-    Given selected definitions and authenticated Primary models
-    When launch plans are resolved from selected definition preferences
-    Then the first matching normalized definition model is selected
-    And unavailable definition models inherit the Primary model
+  Scenario: Model resolution honors explicit candidates then the Primary model
+    Given authenticated Primary models
+    When launch plans are resolved from explicit model preferences
+    Then the first matching normalized override model is selected
+    And a missing model override inherits the Primary model
     And an unavailable explicit model override is rejected
-
-  Scenario: Oversized launch argv fails fast instead of risking silent tty truncation
-    Given selected definitions and authenticated Primary models
-    When a launch plan is resolved for a definition at a deep multi-byte path
-    Then the launch plan rejects the oversized argv with a tty budget error
 
   Scenario: Model awareness notes list only available noted models
     When model awareness notes are computed for available model ids "deepseek-v4-flash, acme/kimi-3"
@@ -40,3 +30,8 @@ Feature: Control surface and Agent definitions
   Scenario: Model awareness notes disappear when no noted model is available
     When model awareness notes are computed for available model ids "some-other-model"
     Then no model awareness notes are produced
+
+  Scenario: Oversized launch argv is rejected before typing into the tty
+    Given authenticated Primary models
+    When a launch plan is resolved with a deep multi-byte extension path
+    Then the launch plan fails within the tty byte budget
