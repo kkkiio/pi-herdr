@@ -30,12 +30,12 @@ Agent 会在单独的 tab 中工作。使用 `/agents` 可以查看当前 live �
 
 Agent 的 pane 保持运行时，其 session 和上下文可以持续复用。关闭 pane 或 tab 会停止对应的 live Agent，但不会删除 Pi session 或可选 worktree。
 
-## Herdr RPC Support
+## What It Adds
 
-pi-herdr 只封装后台 Agent 工作流需要的 Herdr 能力，不替代 Herdr 自身的 workspace、tab、pane 或 worktree 管理。
+pi-herdr 给每个 Herdr 内的 Pi 会话注册三个工具和一个 `/agents` 面板：
 
-| Pi 能力                     | Herdr RPC                                                                     | 用户可见行为                                                   |
-| --------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `Agent`                     | `tab.create` / `worktree.create`, `tab.rename`, `agent.start`, `agent.prompt` | 在独立 tab 中启动持久 Agent，可选择共享目录或独立 Git worktree |
-| `ListAgents`, `SendMessage` | `agent.list`, `agent.get`, `agent.prompt`                                     | 发现并联系 live Agent 或 Pi peer；不提供离线消息队列           |
-| 其他 Herdr 管理能力         | 其余 `workspace.*`、`tab.*`、`pane.*`、`worktree.*`、`layout.*`               | 不由 pi-herdr 封装，直接使用 Herdr                             |
+- `Agent` —— 在独立 tab 中启动持久后台 Agent，可选共享目录或独立 Git worktree。
+- `ListAgents` / `SendMessage` —— 发现并联系 live Agent 或 Pi peer；不提供离线消息队列。
+- `/agents` —— 查看当前 live Agent 与 peer 的运行状态。
+
+其余 Herdr 能力（观察屏幕、等待状态、终端输入、workspace/tab/pane/worktree 管理）不封装成工具；Agent 通过 bash 里的 `herdr` CLI 直接使用，工具守则会提示它这么做。
