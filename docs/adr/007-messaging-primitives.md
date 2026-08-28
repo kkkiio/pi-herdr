@@ -29,7 +29,7 @@ ListAgents 不读取 pi session 文件，不返回已经关闭的 runtime，也�
 
 ### 2. 观察走 herdr CLI，知识放在工具描述里
 
-需要屏幕文本、状态等待、终端输入等更细的观察与控制时，Agent 通过 bash 使用 `herdr` CLI（`herdr agent read`、`herdr agent wait`、`herdr pane` …）。这个指针写在 `ListAgents` 的工具描述里：工具描述每轮都在 context 中，与 system prompt 段落一样是常驻环境知识，但位置在 tools 段，不引入动态内容。
+需要屏幕文本、状态等待、终端输入等更细的观察与控制时，Agent 通过 bash 使用 `herdr` CLI（`herdr agent read`、`herdr agent wait`、`herdr pane` …）。这个指针写在 `ListAgents` 的 prompt guidelines 里：guidelines 随工具注册静态构建进 system prompt 的工具守则段，每轮都在 context 中，与 schema description 一样是常驻环境知识，且不引入任何动态内容。
 
 ### 3. Envelope 与回复约定
 

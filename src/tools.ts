@@ -53,9 +53,12 @@ export function registerAgentTools(
 		name: "ListAgents",
 		label: "List Agents",
 		description:
-			"List every live Agent and Pi peer visible through the current Herdr session, preserving Herdr AgentInfo fields and statuses. For richer observation or control (screen text, waits, terminal input), use the herdr CLI through bash instead: herdr agent read, herdr agent wait, herdr pane. Run herdr --help to discover the full surface.",
+			"List every live Agent and Pi peer visible through the current Herdr session, preserving Herdr AgentInfo fields and statuses.",
 		promptSnippet: "List live Agents and peers in the current Herdr session.",
-		promptGuidelines: ["Use ListAgents to refresh live Agent addresses."],
+		promptGuidelines: [
+			"Use ListAgents to refresh live Agent addresses.",
+			"For richer observation or control (screen text, waits, terminal input), use the herdr CLI through bash instead of a dedicated tool: herdr agent read, herdr agent wait, herdr pane. Run herdr --help to discover the full surface.",
+		],
 		parameters: Type.Object({}, { additionalProperties: false }),
 		execute: async (_toolCallId, _params, signal) => {
 			const result = await supervisor.list(signal);
