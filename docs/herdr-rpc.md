@@ -38,7 +38,7 @@ Herdr push 保留各自实际 wire schema。普通 lifecycle event 使用 `pane_
 
 ## Retry and Delivery
 
-pi-herdr 只自动重试不会产生副作用的读取：`ping`、`session.snapshot`、`agent.list` 和 `agent.get`。启动就绪轮询也只调用 `agent.get`。
+pi-herdr 只自动重试不会产生副作用的读取：`ping`、`session.snapshot`、`agent.list`、`agent.get` 和 `agent.read`。启动就绪轮询也只调用 `agent.get`。
 
 `agent.start`、`agent.prompt`、`tab.rename`、close、tab 和 worktree mutation 不自动重放。若 mutation 已写入 socket、但响应在返回资源 ID 前丢失，调用方无法判断服务端是否已经执行；pi-herdr 保留 unknown delivery 语义，不通过 label 或并发 snapshot 猜测资源归属。创建流程会在错误中报告可能存在的无法寻址 container residual。
 
@@ -48,6 +48,7 @@ pi-herdr 只自动重试不会产生副作用的读取：`ping`、`session.snaps
 | ------------------------------------ | ------------------------------------------------------------------------------------ |
 | Protocol diagnostics and bootstrap   | `ping`, `session.snapshot`                                                           |
 | Live discovery and target resolution | `agent.list`, `agent.get`                                                            |
+| Screen observation                   | `agent.read`                                                                         |
 | Shared Agent container               | `tab.create`                                                                         |
 | Worktree Agent container             | `worktree.create`, `tab.rename`                                                      |
 | Start Pi and wait until interactive  | `agent.start`, read-only `agent.get` polling                                         |
