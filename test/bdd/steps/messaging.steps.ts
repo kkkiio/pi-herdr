@@ -176,7 +176,7 @@ Then("each prompt prefers the target name and preserves a verbatim reply envelop
 	assert.equal(
 		prompts[0]?.params.text,
 		`<from agent="primary&"<>'" reply-to="primary&"<>'" model="deepseek/deepseek-v4-flash">\n` +
-			`<sender-model-note>often reaches wrong conclusions too quickly — verify before acting on them</sender-model-note>\n\n` +
+			`<sender-model-note>often jumps to wrong conclusions — verify before relying on them</sender-model-note>\n\n` +
 			`Review <raw> & reply.`,
 	);
 	assert.equal(prompts[1]?.params.text, `${opening}\nPane-addressed follow-up.`);
