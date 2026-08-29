@@ -23,24 +23,24 @@ export interface ModelNote {
 export const MODEL_NOTES: Record<string, ModelNote> = {
 	"deepseek-v4-flash": {
 		size: "small",
-		strengths: "fast",
+		strengths: "fast, suitable for exploratory tasks",
 		soundness: "often reaches wrong conclusions too quickly — verify before acting on them",
 	},
 	"gpt-5.6-luna": {
 		size: "small",
-		strengths: "cheap",
+		strengths: "cheap, suitable for well-scoped tasks",
 	},
 	"gpt-5.6-terra": {
 		size: "medium",
-		strengths: "capable and rigorous up to medium-hard problems",
+		strengths: "capable and rigorous",
 	},
 	"kimi-3": {
 		size: "big",
-		strengths: "strong at frontend and visual tasks",
+		strengths: "strong at frontend",
 	},
 	"gpt-5.6-sol": {
 		size: "big",
-		strengths: "rigorous",
+		strengths: "rigorous, suitable for consultative and review tasks",
 	},
 };
 
